@@ -2,6 +2,22 @@ import z3
 from collections import defaultdict
 
 
+# Return minimum of a vector; error if empty
+def z3_min(vs):
+    m = vs[0]
+    for v in vs[1:]:
+        m = z3.If(v < m, v, m)
+    return m
+
+
+# Return maximum of a vector; error if empty
+def z3_max(vs):
+    m = vs[0]
+    for v in vs[1:]:
+        m = z3.If(v > m, v, m)
+    return m
+
+
 class Solver:
     EMPTY = (
         (0, 0, 0, 0, 0, 0, 0, 0, 0),
@@ -39,6 +55,12 @@ class Solver:
         self._smaller_thans = []
         self._killer_cages = []
         self._whisper_lines = []
+        self._x_v = []
+        self._renban_lines = []
+        self._anti_knight = False
+        self._anti_king = False
+        self._anti_conconsecutive = False
+        self._disjoint = False
 
     def regions(self, regions):
         self._regions = regions
@@ -76,7 +98,10 @@ class Solver:
         return self
 
     def region_sum_line(self, line):
-        self._region_sum_lines.append(line)
+        return self.region_sum_lines([line])
+
+    def region_sum_lines(self, lines):
+        self._region_sum_lines.extend(lines)
         return self
 
     def zipper_line(self, line):
@@ -101,6 +126,34 @@ class Solver:
 
     def whisper_lines(self, lines, min_diff=5):
         self._whisper_lines.extend([(line, min_diff) for line in lines])
+        return self
+
+    def x(self, cell1, cell2):
+        self._x_v.append((cell1, cell2, 10))
+        return self
+
+    def v(self, cell1, cell2):
+        self._x_v.append((cell1, cell2, 5))
+        return self
+
+    def renban_lines(self, lines):
+        self._renban_lines.extend(lines)
+        return self
+
+    def anti_knight(self):
+        self._anti_knight = True
+        return self
+
+    def anti_king(self):
+        self._anti_king = True
+        return self
+
+    def anti_conconsecutive(self):
+        self._anti_conconsecutive = True
+        return self
+
+    def disjoiint(self):
+        self._disjoint = True
         return self
 
     def solve(self):
@@ -222,6 +275,66 @@ class Solver:
                 v1 = vars[r1][c1]
 
                 s.add(z3.Abs(v0 - v1) >= min_diff)
+
+        # add X/V constraints
+        for (c0, r0), (c1, r1), sum in self._x_v:
+            v0 = vars[r0][c0]
+            v1 = vars[r1][c1]
+            s.add(v0 + v1 == sum)
+
+        # add renban line constraints
+        for line in self._renban_lines:
+            cells = [vars[r][c] for c, r in line]
+            # must by unique
+            s.add(z3.Distinct(cells))
+
+            # must be consecutive
+            #s.add(z3_max(cells) - z3_min(cells) == len(line) - 1)
+            for i, c0 in enumerate(cells):
+                for j, c1 in enumerate(cells):
+                    if i >= j:
+                        continue
+
+                    s.add(z3.Abs(c0 - c1) < len(line))
+
+        # add anti-knight constraint
+        if self._anti_knight:
+            for r in range(9):
+                for c in range(9):
+                    for dc, dr in ((-1, -2), (1, -2), (2, -1), (2, 1), (1, 2), (-1, 2), (-2, 1), (-2, -1), ):
+                        cc = c + dc
+                        rr = r + dr
+
+                        if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
+                            s.add(vars[r][c] != vars[rr][cc])
+
+        # add anti-king constraint
+        if self._anti_king:
+            for r in range(9):
+                for c in range(9):
+                    for dc, dr in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                        cc = c + dc
+                        rr = r + dr
+
+                        if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
+                            s.add(vars[r][c] != vars[rr][cc])
+
+        # add anti-conconsecutive constraint
+        if self._anti_conconsecutive:
+            for r in range(9):
+                for c in range(9):
+                    for dc, dr in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+                        cc = c + dc
+                        rr = r + dr
+
+                        if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
+                            s.add(z3.Abs(vars[r][c] - vars[rr][cc]) != 1)
+
+        # add disjoint constraint
+        if self._disjoint:
+            for ss in zip(*self._regions):
+                cells = [vars[r][c] for c, r in ss]
+                s.add(z3.Distinct(cells))
 
         # add givens
         for r, row in enumerate(self.given):
