@@ -35,6 +35,7 @@ class Solver:
         self._black_kropkis = []
         self._white_kropkis = []
         self._region_sum_lines = []
+        self._zipper_lines = []
 
     def regions(self, regions):
         self._regions = regions
@@ -73,6 +74,14 @@ class Solver:
 
     def region_sum_line(self, line):
         self._region_sum_lines.append(line)
+        return self
+
+    def zipper_line(self, line):
+        self._zipper_lines.append(line)
+        return self
+
+    def zipper_lines(self, lines):
+        self._zipper_lines.extend(lines)
         return self
 
     def solve(self):
@@ -160,6 +169,19 @@ class Solver:
                 s1 = z3.Sum([vars[r][c] for c, r in c1])
                 s2 = z3.Sum([vars[r][c] for c, r in c2])
                 s.add(s1 == s2)
+
+        # add zipper line constraints
+        for line in self._zipper_lines:
+            middle_i = len(line) // 2
+            part1 = line[:middle_i][::-1]
+            part2 = line[middle_i+1:]
+
+            assert len(part1) == len(part2)
+
+            mc, mr = line[middle_i]
+
+            for (c0, r0), (c1, r1) in zip(part1, part2):
+                s.add(vars[mr][mc] == vars[r0][c0] + vars[r1][c1])
 
         # add givens
         for r, row in enumerate(self.given):
