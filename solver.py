@@ -2,22 +2,6 @@ import z3
 from collections import defaultdict
 
 
-# Return minimum of a vector; error if empty
-def z3_min(vs):
-    m = vs[0]
-    for v in vs[1:]:
-        m = z3.If(v < m, v, m)
-    return m
-
-
-# Return maximum of a vector; error if empty
-def z3_max(vs):
-    m = vs[0]
-    for v in vs[1:]:
-        m = z3.If(v > m, v, m)
-    return m
-
-
 class Solver:
     EMPTY = (
         (0, 0, 0, 0, 0, 0, 0, 0, 0),
@@ -59,7 +43,7 @@ class Solver:
         self._renban_lines = []
         self._anti_knight = False
         self._anti_king = False
-        self._anti_conconsecutive = False
+        self._anti_consecutive = False
         self._disjoint = False
 
     def regions(self, regions):
@@ -148,8 +132,8 @@ class Solver:
         self._anti_king = True
         return self
 
-    def anti_conconsecutive(self):
-        self._anti_conconsecutive = True
+    def anti_consecutive(self):
+        self._anti_consecutive = True
         return self
 
     def disjoiint(self):
@@ -289,7 +273,6 @@ class Solver:
             s.add(z3.Distinct(cells))
 
             # must be consecutive
-            #s.add(z3_max(cells) - z3_min(cells) == len(line) - 1)
             for i, c0 in enumerate(cells):
                 for j, c1 in enumerate(cells):
                     if i >= j:
@@ -319,8 +302,8 @@ class Solver:
                         if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
                             s.add(vars[r][c] != vars[rr][cc])
 
-        # add anti-conconsecutive constraint
-        if self._anti_conconsecutive:
+        # add anti-consecutive constraint
+        if self._anti_consecutive:
             for r in range(9):
                 for c in range(9):
                     for dc, dr in ((0, -1), (1, 0), (0, 1), (-1, 0)):
