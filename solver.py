@@ -38,6 +38,7 @@ class Solver:
         self._zipper_lines = []
         self._smaller_thans = []
         self._killer_cages = []
+        self._whisper_lines = []
 
     def regions(self, regions):
         self._regions = regions
@@ -96,6 +97,10 @@ class Solver:
 
     def little_killer(self, cage, sum):
         self._killer_cages.append((cage, sum, False))
+        return self
+
+    def whisper_lines(self, lines, min_diff=5):
+        self._whisper_lines.extend([(line, min_diff) for line in lines])
         return self
 
     def solve(self):
@@ -209,6 +214,14 @@ class Solver:
 
             if sum is not None:
                 s.add(sum == z3.Sum([vars[r][c] for c, r in cage]))
+
+        # add whisper line constraints
+        for line, min_diff in self._whisper_lines:
+            for (c0, r0), (c1, r1) in zip(line, line[1:]):
+                v0 = vars[r0][c0]
+                v1 = vars[r1][c1]
+
+                s.add(z3.Abs(v0 - v1) >= min_diff)
 
         # add givens
         for r, row in enumerate(self.given):
