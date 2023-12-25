@@ -36,6 +36,8 @@ class Solver:
         self._white_kropkis = []
         self._region_sum_lines = []
         self._zipper_lines = []
+        self._smaller_thans = []
+        self._killer_cages = []
 
     def regions(self, regions):
         self._regions = regions
@@ -82,6 +84,18 @@ class Solver:
 
     def zipper_lines(self, lines):
         self._zipper_lines.extend(lines)
+        return self
+
+    def smaller_than(self, smaller, larger):
+        self._smaller_thans.append((smaller, larger))
+        return self
+
+    def killer_cage(self, cage, sum=None, unique=True):
+        self._killer_cages.append((cage, sum, unique))
+        return self
+
+    def little_killer(self, cage, sum):
+        self._killer_cages.append((cage, sum, False))
         return self
 
     def solve(self):
@@ -182,6 +196,19 @@ class Solver:
 
             for (c0, r0), (c1, r1) in zip(part1, part2):
                 s.add(vars[mr][mc] == vars[r0][c0] + vars[r1][c1])
+
+        # add smaller-than constraints
+        for (sc, sr), (lc, lr) in self._smaller_thans:
+            s.add(vars[sr][sc] < vars[lr][lc])
+
+        # add killer cage constraints
+        for cage, sum, unique in self._killer_cages:
+            if unique:
+                # digits in the cage must be unique
+                s.add(z3.Distinct([vars[r][c] for c, r in cage]))
+
+            if sum is not None:
+                s.add(sum == z3.Sum([vars[r][c] for c, r in cage]))
 
         # add givens
         for r, row in enumerate(self.given):
