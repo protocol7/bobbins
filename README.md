@@ -21,10 +21,10 @@ Supports the following constraints:
 * Anti-king
 * Anti-consecutive (orthogonal cells can not be consecutive)
 * Disjoint sets (cells in the same position in a region can not have the same digits)
+* Entropic lines
 
 ## TODO
 
 * Non-9x9 grid
 * Odd/even cells
 * Modular lines
-* Entropic lines

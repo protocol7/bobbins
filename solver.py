@@ -40,11 +40,13 @@ class Solver:
         self._killer_cages = []
         self._whisper_lines = []
         self._x_v = []
+        self._anti_x_v = False
         self._renban_lines = []
         self._anti_knight = False
         self._anti_king = False
         self._anti_consecutive = False
         self._disjoint = False
+        self._entropic_lines = []
 
     def regions(self, regions):
         self._regions = regions
@@ -138,6 +140,14 @@ class Solver:
 
     def disjoiint(self):
         self._disjoint = True
+        return self
+
+    def entropic_lines(self, lines):
+        self._entropic_lines.extend(lines)
+        return self
+
+    def anti_x_v(self):
+        self._anti_x_v = True
         return self
 
     def solve(self):
@@ -260,11 +270,33 @@ class Solver:
 
                 s.add(z3.Abs(v0 - v1) >= min_diff)
 
+        def all_dominos(vars):
+            for r in range(9):
+                for c in range(9):
+                    for dc, dr in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+                        cc = c + dc
+                        rr = r + dr
+
+                        if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
+                            v0 = vars[r][c]
+                            v1 = vars[rr][cc]
+
+                            yield (c, r), v0, (cc, rr), v1
+
         # add X/V constraints
         for (c0, r0), (c1, r1), sum in self._x_v:
             v0 = vars[r0][c0]
             v1 = vars[r1][c1]
             s.add(v0 + v1 == sum)
+
+        if self._anti_x_v:
+            for cell0, v0, cell1, v1 in all_dominos(vars):
+                if cell0 in self._x_v and cell1 in self._x_v:
+                    # has an X or V
+                    continue
+
+                s.add(v0 + v1 != 5)
+                s.add(v0 + v1 != 10)
 
         # add renban line constraints
         for line in self._renban_lines:
@@ -304,20 +336,43 @@ class Solver:
 
         # add anti-consecutive constraint
         if self._anti_consecutive:
-            for r in range(9):
-                for c in range(9):
-                    for dc, dr in ((0, -1), (1, 0), (0, 1), (-1, 0)):
-                        cc = c + dc
-                        rr = r + dr
-
-                        if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
-                            s.add(z3.Abs(vars[r][c] - vars[rr][cc]) != 1)
+            for _, v0, _, v1 in all_dominos(vars):
+                s.add(z3.Abs(v0 - v1) != 1)
 
         # add disjoint constraint
         if self._disjoint:
             for ss in zip(*self._regions):
                 cells = [vars[r][c] for c, r in ss]
                 s.add(z3.Distinct(cells))
+
+        # add entropic lines constraints
+        for line in self._entropic_lines:
+            def same_entropy(offset):
+                items = [line[i] for i in range(offset, len(line), 3)]
+                cells = [vars[r][c] for c, r in items]
+
+                for v0, v1 in zip(cells, cells[1:]):
+                    s.add((v0 - 1) / 3 == (v1 - 1) / 3)
+
+            for offset in range(3):
+                same_entropy(offset)
+
+            # above we check that we have chains of the same entropy
+            # throughout the line, so here we only need to check the
+            # first three cells on the line and make sure they don't
+            # have the same entropy
+
+            # TODO fix
+            assert len(line) >= 3
+
+            (c0, r0), (c1, r1), (c2, r2) = line[:3]
+            v0 = vars[r0][c0]
+            v1 = vars[r1][c1]
+            v2 = vars[r2][c2]
+
+            s.add((v0 - 1) / 3 != (v1 - 1) / 3)
+            s.add((v1 - 1) / 3 != (v2 - 1) / 3)
+            s.add((v0 - 1) / 3 != (v2 - 1) / 3)
 
         # add givens
         for r, row in enumerate(self.given):

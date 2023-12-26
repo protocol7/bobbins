@@ -19,7 +19,7 @@ s = (
     Solver(given)
     .anti_king()
     .anti_knight()
-    .anti_conconsecutive()
+    .anti_consecutive()
 )
 solution = s.solve()
 
