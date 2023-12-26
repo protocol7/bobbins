@@ -47,6 +47,9 @@ class Solver:
         self._anti_consecutive = False
         self._disjoint = False
         self._entropic_lines = []
+        self._odd_cells = []
+        self._even_cells = []
+        self._nabner_lines = []
 
     def regions(self, regions):
         self._regions = regions
@@ -148,6 +151,18 @@ class Solver:
 
     def anti_x_v(self):
         self._anti_x_v = True
+        return self
+
+    def odds(self, cells):
+        self._odd_cells.extend(cells)
+        return self
+
+    def evens(self, cells):
+        self._even_cells.extend(cells)
+        return self
+
+    def nabner_lines(self, lines):
+        self._nabner_lines.extend(lines)
         return self
 
     def solve(self):
@@ -312,6 +327,20 @@ class Solver:
 
                     s.add(z3.Abs(c0 - c1) < len(line))
 
+        # add nabner line constraints
+        for line in self._nabner_lines:
+            cells = [vars[r][c] for c, r in line]
+            # must by unique
+            s.add(z3.Distinct(cells))
+
+            # must not be consecutive
+            for i, c0 in enumerate(cells):
+                for j, c1 in enumerate(cells):
+                    if i >= j:
+                        continue
+
+                    s.add(z3.Abs(c0 - c1) != 1)
+
         # add anti-knight constraint
         if self._anti_knight:
             for r in range(9):
@@ -373,6 +402,13 @@ class Solver:
             s.add((v0 - 1) / 3 != (v1 - 1) / 3)
             s.add((v1 - 1) / 3 != (v2 - 1) / 3)
             s.add((v0 - 1) / 3 != (v2 - 1) / 3)
+
+        # add odd/even constraints
+        for c, r in self._odd_cells:
+            s.add(vars[r][c] % 2 == 1)
+
+        for c, r in self._even_cells:
+            s.add(vars[r][c] % 2 == 0)
 
         # add givens
         for r, row in enumerate(self.given):
