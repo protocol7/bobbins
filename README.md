@@ -25,6 +25,9 @@ Supports the following constraints:
 * Odd/even cells
 * Renban lines
 * Nabner lines
+* Palindroms
+
+Also supports adding custom constraints per solve.
 
 ## TODO
 
