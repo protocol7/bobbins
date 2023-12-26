@@ -1,18 +1,21 @@
 import z3
 from collections import defaultdict
 
+_ = None
+
 
 class Solver:
+
     EMPTY = (
-        (0, 0, 0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0, 0),
+        (_, _, _, _, _, _, _, _, _),
+        (_, _, _, _, _, _, _, _, _),
+        (_, _, _, _, _, _, _, _, _),
+        (_, _, _, _, _, _, _, _, _),
+        (_, _, _, _, _, _, _, _, _),
+        (_, _, _, _, _, _, _, _, _),
+        (_, _, _, _, _, _, _, _, _),
+        (_, _, _, _, _, _, _, _, _),
+        (_, _, _, _, _, _, _, _, _),
     )
 
     def __init__(self, given):
@@ -28,6 +31,7 @@ class Solver:
             ((3, 6), (4, 6), (5, 6), (3, 7), (4, 7), (5, 7), (3, 8), (4, 8), (5, 8)),
             ((6, 6), (7, 6), (8, 6), (6, 7), (7, 7), (8, 7), (6, 8), (7, 8), (8, 8)),
         ]
+        self._digits = list(range(1, 9 + 1))
         self._unique_positive_diagonal = False
         self._unique_negative_diagonal = False
         self._thermos = []
@@ -56,6 +60,11 @@ class Solver:
 
     def regions(self, regions):
         self._regions = regions
+        return self
+
+    def digits(self, digits):
+        self._digits = digits
+        return self
 
     def unique_positive_diagonal(self):
         self._unique_positive_diagonal = True
@@ -185,8 +194,8 @@ class Solver:
         for r in range(9):
             row = []
             for c in range(9):
-                v = z3.Int("r%sc%s" % (r, c))
-                s.add(v >= 1, v <= 9)
+                v = z3.Int("c%sr%s" % (c, r))
+                s.add(z3.Or([v == d for d in self._digits]))
 
                 row.append(v)
 
@@ -297,19 +306,6 @@ class Solver:
 
                 s.add(z3.Abs(v0 - v1) >= min_diff)
 
-        def all_dominos(vars):
-            for r in range(9):
-                for c in range(9):
-                    for dc, dr in ((0, -1), (1, 0), (0, 1), (-1, 0)):
-                        cc = c + dc
-                        rr = r + dr
-
-                        if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
-                            v0 = vars[r][c]
-                            v1 = vars[rr][cc]
-
-                            yield (c, r), v0, (cc, rr), v1
-
         # add X/V constraints
         for (c0, r0), (c1, r1), sum in self._x_v:
             v0 = vars[r0][c0]
@@ -317,7 +313,7 @@ class Solver:
             s.add(v0 + v1 == sum)
 
         if self._anti_x_v:
-            for cell0, v0, cell1, v1 in all_dominos(vars):
+            for cell0, v0, cell1, v1 in Solver.all_dominos(vars):
                 if cell0 in self._x_v and cell1 in self._x_v:
                     # has an X or V
                     continue
@@ -377,7 +373,7 @@ class Solver:
 
         # add anti-consecutive constraint
         if self._anti_consecutive:
-            for _, v0, _, v1 in all_dominos(vars):
+            for _, v0, _, v1 in Solver.all_dominos(vars):
                 s.add(z3.Abs(v0 - v1) != 1)
 
         # add disjoint constraint
@@ -442,7 +438,7 @@ class Solver:
         # add givens
         for r, row in enumerate(self.given):
             for c, x in enumerate(row):
-                if x != 0:
+                if x in self._digits:
                     s.add(vars[r][c] == x)
 
         # solve
@@ -452,6 +448,20 @@ class Solver:
             return r
         else:
             return None
+
+    @staticmethod
+    def all_dominos(vars):
+        for r in range(9):
+            for c in range(9):
+                for dc, dr in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+                    cc = c + dc
+                    rr = r + dr
+
+                    if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
+                        v0 = vars[r][c]
+                        v1 = vars[rr][cc]
+
+                        yield (c, r), v0, (cc, rr), v1
 
     @staticmethod
     def pretty_print(solution):
