@@ -50,6 +50,9 @@ class Solver:
         self._odd_cells = []
         self._even_cells = []
         self._nabner_lines = []
+        self._palindrom_lines = []
+
+        self._extra_constraints = []
 
     def regions(self, regions):
         self._regions = regions
@@ -163,6 +166,15 @@ class Solver:
 
     def nabner_lines(self, lines):
         self._nabner_lines.extend(lines)
+        return self
+
+    def palidrom_lines(self, lines):
+        self._palindrom_lines.extend(lines)
+        return self
+
+    # fn(solver, cells)
+    def extra_constraint(self, fn):
+        self._extra_constraints.append(fn)
         return self
 
     def solve(self):
@@ -391,17 +403,19 @@ class Solver:
             # first three cells on the line and make sure they don't
             # have the same entropy
 
-            # TODO fix
-            assert len(line) >= 3
+            assert len(line) >= 2
 
-            (c0, r0), (c1, r1), (c2, r2) = line[:3]
+            (c0, r0), (c1, r1) = line[:2]
             v0 = vars[r0][c0]
             v1 = vars[r1][c1]
-            v2 = vars[r2][c2]
-
             s.add((v0 - 1) / 3 != (v1 - 1) / 3)
-            s.add((v1 - 1) / 3 != (v2 - 1) / 3)
-            s.add((v0 - 1) / 3 != (v2 - 1) / 3)
+
+            if len(line) > 2:
+                (c2, r2) = line[2]
+                v2 = vars[r2][c2]
+
+                s.add((v1 - 1) / 3 != (v2 - 1) / 3)
+                s.add((v0 - 1) / 3 != (v2 - 1) / 3)
 
         # add odd/even constraints
         for c, r in self._odd_cells:
@@ -409,6 +423,21 @@ class Solver:
 
         for c, r in self._even_cells:
             s.add(vars[r][c] % 2 == 0)
+
+        # add palindrom constraints
+        for line in self._palindrom_lines:
+            middle_i = len(line) // 2
+            part1 = line[:middle_i][::-1]
+            part2 = line[middle_i+1:]
+
+            assert len(part1) == len(part2)
+
+            for (c0, r0), (c1, r1) in zip(part1, part2):
+                s.add(vars[r0][c0] == vars[r1][c1])
+
+        # add any extra constraints
+        for extra_constraint in self._extra_constraints:
+            extra_constraint(s, vars)
 
         # add givens
         for r, row in enumerate(self.given):
