@@ -57,6 +57,8 @@ class Solver:
         self._palindrom_lines = []
         self._between_lines = []
         self._quadruples = []
+        self._xsums_rows = []
+        self._xsums_cols = []
 
         self._extra_constraints = []
 
@@ -189,6 +191,11 @@ class Solver:
 
     def quadruple(self, upper_left_cell, digits):
         self._quadruples.append((upper_left_cell, digits))
+        return self
+
+    def xsums(self, rows, cols):
+        self._xsums_rows.extend(rows)
+        self._xsums_cols.extend(cols)
         return self
 
     # fn(solver, cells)
@@ -469,6 +476,33 @@ class Solver:
                 constraints.append(z3.Or(v0 == d, v1 == d, v2 == d, v3 == d))
 
             s.add(z3.And(constraints))
+
+        # add xsum constraints
+        def _xsums(cc, cr, sum, vr):
+            vx = vars[cr][cc]
+            or_constraints = []
+            for x in range(1, 10):
+                sub_vr = vr[:x]
+
+                or_constraints.append(z3.And(vx == x, z3.Sum(sub_vr) == sum))
+
+            s.add(z3.Or(or_constraints))
+
+        # xsums rows
+        for (cc, cr), sum in self._xsums_rows:
+            vr = vars[cr]
+            if cc == 8:
+                vr = vr[::-1]
+
+            _xsums(cc, cr, sum, vr)
+
+        # xsums cols
+        for (cc, cr), sum in self._xsums_cols:
+            vc = [vars[r][cc] for r in range(0, 9)]
+            if cr == 8:
+                vc = vc[::-1]
+
+            _xsums(cc, cr, sum, vc)
 
         # add any extra constraints
         for extra_constraint in self._extra_constraints:
