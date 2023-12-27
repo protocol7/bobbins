@@ -179,7 +179,7 @@ class Solver:
         self._nabner_lines.extend(lines)
         return self
 
-    def palidrom_lines(self, lines):
+    def palindrom_lines(self, lines):
         self._palindrom_lines.extend(lines)
         return self
 
@@ -434,7 +434,10 @@ class Solver:
         for line in self._palindrom_lines:
             middle_i = len(line) // 2
             part1 = line[:middle_i][::-1]
-            part2 = line[middle_i+1:]
+            if len(line) % 2 == 1:
+                part2 = line[middle_i+1:]
+            else:
+                part2 = line[middle_i:]
 
             assert len(part1) == len(part2)
 
