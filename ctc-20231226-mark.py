@@ -8,20 +8,24 @@ MAKE_IT_UNIQUE_CELLS = [
     [(8, 5), (8, 6)],
 ]
 
-def make_it_unique(s, cells):
+s = Solver()
+
+
+def make_it_unique(z3_s, cells):
     for (mc0, mr0), (mc1, mr1) in MAKE_IT_UNIQUE_CELLS:
         mv0 = cells[mr0][mc0]
         mv1 = cells[mr1][mc1]
-        for (c0, r0), v0, (c1, r1), v1 in Solver.all_dominos(cells):
+
+        for (c0, r0), v0, (c1, r1), v1 in s.all_dominos(cells):
 
             if c0 == mc0 and r0 == mr0 and c1 == mc1 and r1 == mr1:
                 continue
             else:
-                s.add(z3.Or(mv0 != v0, mv1 != v1))
+                z3_s.add(z3.Or(mv0 != v0, mv1 != v1))
+
 
 s = (
-    Solver(Solver.EMPTY)
-    .digits(list(range(0, 8 + 1)))
+    s.digits(list(range(0, 8 + 1)))
     .white_kropkis(
         (
             ((3, 1), (4, 1)),

@@ -2,9 +2,10 @@
 
 z3 based variant Sudoku solver. Also includes some example Cracking the Cryptic puzzles.
 
-Supports the following constraints:
+Supports the following features:
 
 * Any set of digits (default 1-9)
+* Any sized grid
 * Given digits
 * Regular/irregular regions
 * Non-repeating diagonals
@@ -35,5 +36,4 @@ Also supports adding custom constraints per solve. There are a fair amount of ex
 
 ## TODO
 
-* Non-9x9 grid
 * Modular lines

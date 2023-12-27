@@ -6,7 +6,7 @@ _ = None
 
 class Solver:
 
-    EMPTY = (
+    EMPTY_9X9 = (
         (_, _, _, _, _, _, _, _, _),
         (_, _, _, _, _, _, _, _, _),
         (_, _, _, _, _, _, _, _, _),
@@ -17,10 +17,17 @@ class Solver:
         (_, _, _, _, _, _, _, _, _),
         (_, _, _, _, _, _, _, _, _),
     )
+    EMPTY = EMPTY_9X9
 
-    def __init__(self, given):
-        self.given = given
-        self._regions = [
+    EMPTY_4X4 = (
+        (_, _, _, _),
+        (_, _, _, _),
+        (_, _, _, _),
+        (_, _, _, _),
+        (_, _, _, _),
+    )
+
+    REGULAR_9X9_REGIONS = [
             ((0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1), (0, 2), (1, 2), (2, 2)),
             ((3, 0), (4, 0), (5, 0), (3, 1), (4, 1), (5, 1), (3, 2), (4, 2), (5, 2)),
             ((6, 0), (7, 0), (8, 0), (6, 1), (7, 1), (8, 1), (6, 2), (7, 2), (8, 2)),
@@ -31,6 +38,27 @@ class Solver:
             ((3, 6), (4, 6), (5, 6), (3, 7), (4, 7), (5, 7), (3, 8), (4, 8), (5, 8)),
             ((6, 6), (7, 6), (8, 6), (6, 7), (7, 7), (8, 7), (6, 8), (7, 8), (8, 8)),
         ]
+
+    REGULAR_4X4_REGIONS = [
+            ((0, 0), (1, 0), (0, 1), (1, 1)),
+            ((2, 0), (3, 0), (2, 1), (3, 1)),
+            ((0, 2), (1, 2), (0, 3), (1, 3)),
+            ((2, 2), (3, 2), (2, 3), (3, 3)),
+        ]
+
+    @staticmethod
+    def regular_4x4(given=EMPTY_4X4):
+        return (
+            Solver(given=given, width=4, height=4)
+            .digits(list(range(1, 4 + 1)))
+            .regions(Solver.REGULAR_4X4_REGIONS)
+        )
+
+    def __init__(self, given=EMPTY_9X9, width=9, height=9):
+        self.given = given
+        self._width = width
+        self._height = height
+        self._regions = Solver.REGULAR_9X9_REGIONS
         self._digits = list(range(1, 9 + 1))
         self._unique_positive_diagonal = False
         self._unique_negative_diagonal = False
@@ -206,11 +234,11 @@ class Solver:
     def solve(self):
         s = z3.Solver()
 
-        # 9x9 matrix of integer variables
+        # matrix of integer variables
         vars = []
-        for r in range(9):
+        for r in range(self._height):
             row = []
-            for c in range(9):
+            for c in range(self._width):
                 v = z3.Int("c%sr%s" % (c, r))
                 s.add(z3.Or([v == d for d in self._digits]))
 
@@ -231,16 +259,20 @@ class Solver:
 
         # add diagnoal constraints
         if self._unique_positive_diagonal:
+            assert self._height == self._width
+
             diagonal = []
-            for r in range(8, -1, -1):
+            for r in range(self._height - 1, -1, -1):
                 c = 8 - r
                 diagonal.append(vars[r][c])
 
             s.add(z3.Distinct(diagonal))
 
         if self._unique_negative_diagonal:
+            assert self._height == self._width
+
             diagonal = []
-            for r in range(9):
+            for r in range(self._height):
                 diagonal.append(vars[r][r])
 
             s.add(z3.Distinct(diagonal))
@@ -330,7 +362,7 @@ class Solver:
             s.add(v0 + v1 == sum)
 
         if self._anti_x_v:
-            for cell0, v0, cell1, v1 in Solver.all_dominos(vars):
+            for cell0, v0, cell1, v1 in self.all_dominos(vars):
                 if cell0 in self._x_v and cell1 in self._x_v:
                     # has an X or V
                     continue
@@ -368,29 +400,29 @@ class Solver:
 
         # add anti-knight constraint
         if self._anti_knight:
-            for r in range(9):
-                for c in range(9):
+            for r in range(self._height):
+                for c in range(self._width):
                     for dc, dr in ((-1, -2), (1, -2), (2, -1), (2, 1), (1, 2), (-1, 2), (-2, 1), (-2, -1), ):
                         cc = c + dc
                         rr = r + dr
 
-                        if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
+                        if cc >= 0 and rr >= 0 and cc < self._width and rr < self._height:
                             s.add(vars[r][c] != vars[rr][cc])
 
         # add anti-king constraint
         if self._anti_king:
-            for r in range(9):
-                for c in range(9):
+            for r in range(self._height):
+                for c in range(self._width):
                     for dc, dr in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
                         cc = c + dc
                         rr = r + dr
 
-                        if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
+                        if cc >= 0 and rr >= 0 and cc < self._width and rr < self._height:
                             s.add(vars[r][c] != vars[rr][cc])
 
         # add anti-consecutive constraint
         if self._anti_consecutive:
-            for _, v0, _, v1 in Solver.all_dominos(vars):
+            for _, v0, _, v1 in self.all_dominos(vars):
                 s.add(z3.Abs(v0 - v1) != 1)
 
         # add disjoint constraint
@@ -478,10 +510,10 @@ class Solver:
             s.add(z3.And(constraints))
 
         # add xsum constraints
-        def _xsums(cc, cr, sum, vr):
+        def _xsums(cc, cr, sum, vr, max_x):
             vx = vars[cr][cc]
             or_constraints = []
-            for x in range(1, 10):
+            for x in range(1, max_x + 1):
                 sub_vr = vr[:x]
 
                 or_constraints.append(z3.And(vx == x, z3.Sum(sub_vr) == sum))
@@ -494,15 +526,15 @@ class Solver:
             if cc == 8:
                 vr = vr[::-1]
 
-            _xsums(cc, cr, sum, vr)
+            _xsums(cc, cr, sum, vr, self._width)
 
         # xsums cols
         for (cc, cr), sum in self._xsums_cols:
-            vc = [vars[r][cc] for r in range(0, 9)]
+            vc = [vars[r][cc] for r in range(0, self._height)]
             if cr == 8:
                 vc = vc[::-1]
 
-            _xsums(cc, cr, sum, vc)
+            _xsums(cc, cr, sum, vc, self._height)
 
         # add any extra constraints
         for extra_constraint in self._extra_constraints:
@@ -517,20 +549,19 @@ class Solver:
         # solve
         if s.check() == z3.sat:
             m = s.model()
-            r = [[m.evaluate(vars[i][j]) for j in range(9)] for i in range(9)]
+            r = [[m.evaluate(vars[r][c]) for c in range(self._width)] for r in range(self._height)]
             return r
         else:
             return None
 
-    @staticmethod
-    def all_dominos(vars):
-        for r in range(9):
-            for c in range(9):
+    def all_dominos(self, vars):
+        for r in range(self._height):
+            for c in range(self._width):
                 for dc, dr in ((0, -1), (1, 0), (0, 1), (-1, 0)):
                     cc = c + dc
                     rr = r + dr
 
-                    if cc >= 0 and rr >= 0 and cc < 9 and rr < 9:
+                    if cc >= 0 and rr >= 0 and cc < self._width and rr < self._height:
                         v0 = vars[r][c]
                         v1 = vars[rr][cc]
 
