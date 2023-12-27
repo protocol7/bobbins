@@ -55,6 +55,8 @@ class Solver:
         self._even_cells = []
         self._nabner_lines = []
         self._palindrom_lines = []
+        self._between_lines = []
+        self._quadruples = []
 
         self._extra_constraints = []
 
@@ -179,6 +181,14 @@ class Solver:
 
     def palidrom_lines(self, lines):
         self._palindrom_lines.extend(lines)
+        return self
+
+    def between_lines(self, lines):
+        self._between_lines.extend(lines)
+        return self
+
+    def quadruple(self, upper_left_cell, digits):
+        self._quadruples.append((upper_left_cell, digits))
         return self
 
     # fn(solver, cells)
@@ -430,6 +440,32 @@ class Solver:
 
             for (c0, r0), (c1, r1) in zip(part1, part2):
                 s.add(vars[r0][c0] == vars[r1][c1])
+
+        # add between line constraints
+        for line in self._between_lines:
+            xc, xr = line[0]
+            yc, yr = line[-1]
+            line = line[1:-1]
+            xv = vars[xr][xc]
+            yv = vars[yr][yc]
+
+            for c, r in line:
+                v = vars[r][c]
+                s.add(z3.Or(z3.And(v < xv, v > yv), z3.And(v > xv, v < yv)))
+
+        # add quadruple constraints
+        for (c, r), digits in self._quadruples:
+            # TODO add support for repeated digits in quadruples
+            assert len(digits) == len(set(digits))
+
+            cs = [(c, r), (c + 1, r), (c, r + 1), (c + 1, r + 1)]
+            v0, v1, v2, v3 = [vars[r][c] for c, r in cs]
+
+            constraints = []
+            for d in digits:
+                constraints.append(z3.Or(v0 == d, v1 == d, v2 == d, v3 == d))
+
+            s.add(z3.And(constraints))
 
         # add any extra constraints
         for extra_constraint in self._extra_constraints:

@@ -4,6 +4,7 @@ z3 based variant Sudoku solver. Also includes some example Cracking the Cryptic 
 
 Supports the following constraints:
 
+* Any set of digits (default 1-9)
 * Given digits
 * Regular/irregular regions
 * Non-repeating diagonals
@@ -26,6 +27,8 @@ Supports the following constraints:
 * Renban lines
 * Nabner lines
 * Palindroms
+* Between lines
+* Quadruples
 
 Also supports adding custom constraints per solve.
 
