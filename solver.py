@@ -319,17 +319,33 @@ class Solver:
 
     def _add_zipper_lines(self, s, vars):
         # add zipper line constraints
-        for line in self._zipper_lines:
-            middle_i = len(line) // 2
-            part1 = line[:middle_i][::-1]
-            part2 = line[middle_i+1:]
 
-            assert len(part1) == len(part2)
+        # Digits an equal distance from the centre of a
+        # zipper line must sum to the same total.
 
-            mc, mr = line[middle_i]
+        for i, line in enumerate(self._zipper_lines):
+            # For odd length lines, the total is the digit in the centre of
+            # the line.
+            if len(line) % 2 == 1:
+                middle_i = len(line) // 2
+                part1 = line[:middle_i][::-1]
+                part2 = line[middle_i+1:]
+
+                assert len(part1) == len(part2)
+
+                mc, mr = line[middle_i]
+                vsum = vars[mr][mc]
+            else:
+                middle_i = len(line) // 2
+                part1 = line[:middle_i][::-1]
+                part2 = line[middle_i:]
+
+                assert len(part1) == len(part2)
+
+                vsum = z3.Int("zipper_%s" % i)
 
             for (c0, r0), (c1, r1) in zip(part1, part2):
-                s.add(vars[mr][mc] == vars[r0][c0] + vars[r1][c1])
+                s.add(vsum == vars[r0][c0] + vars[r1][c1])
 
     def _add_smaller_than(self, s, vars):
         # add smaller-than constraints

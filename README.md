@@ -31,6 +31,8 @@ Supports the following features:
 * Between lines
 * Quadruples
 * Xsums
+* Sandwhiches
+* Clones
 
 Also supports adding custom constraints per solve. There are a fair amount of examples of these, e.g 10 sum lines, magic squares and thripples.
 
