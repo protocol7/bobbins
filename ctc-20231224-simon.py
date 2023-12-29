@@ -12,6 +12,7 @@ LINES = [
     [(7, 3), [(6, 3)], [(8, 3)], [(7, 4)]],
 ]
 
+
 def thripple(s, cells):
     for (mc, mr), leg0, leg1, leg2 in LINES:
         assert len(leg0) == len(leg1) == len(leg2)

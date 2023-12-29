@@ -36,6 +36,7 @@ s = (
     .arrow([(3, 1), (3, 2), (4, 1), (5, 1)])
     .extra_constraint(anti_knight_ten)
 )
+
 solution = s.solve()
 
 Solver.pretty_print(solution)

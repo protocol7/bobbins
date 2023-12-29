@@ -1,5 +1,6 @@
 import z3
 from collections import defaultdict
+from itertools import combinations
 
 _ = None
 
@@ -87,6 +88,9 @@ class Solver:
         self._quadruples = []
         self._xsums_rows = []
         self._xsums_cols = []
+        self._clones = []
+        self._sandwhich_rows = []
+        self._sandwhich_cols = []
 
         self._extra_constraints = []
 
@@ -226,38 +230,26 @@ class Solver:
         self._xsums_cols.extend(cols)
         return self
 
+    def clones(self, clones):
+        self._clones.extend(clones)
+        return self
+
+    def sandwhiches(self, rows, cols, low_digit=1, high_digit=9):
+        for row in rows:
+            self._sandwhich_rows.append((row, low_digit, high_digit))
+        for col in cols:
+            self._sandwhich_cols.append((col, low_digit, high_digit))
+        return self
+
     # fn(solver, cells)
     def extra_constraint(self, fn):
         self._extra_constraints.append(fn)
         return self
 
-    def solve(self):
-        s = z3.Solver()
+    # here are methods for adding each type of constraint
 
-        # matrix of integer variables
-        vars = []
-        for r in range(self._height):
-            row = []
-            for c in range(self._width):
-                v = z3.Int("c%sr%s" % (c, r))
-                s.add(z3.Or([v == d for d in self._digits]))
-
-                row.append(v)
-
-            # each row contains a digit at most once
-            s.add(z3.Distinct(row))
-
-            vars.append(row)
-
-        # each column contains a digit at most once
-        for col in map(list, zip(*vars)):
-            s.add(z3.Distinct(col))
-
-        # add region constraints
-        for region in self._regions:
-            s.add(z3.Distinct([vars[r][c] for c, r in region]))
-
-        # add diagnoal constraints
+    def _add_diagonals(self, s, vars):
+        # add diagonal constraints
         if self._unique_positive_diagonal:
             assert self._height == self._width
 
@@ -277,6 +269,7 @@ class Solver:
 
             s.add(z3.Distinct(diagonal))
 
+    def _add_thermos(self, s, vars):
         # add thermo constraints
         for thermo, slow in self._thermos:
             for (c0, r0), (c1, r1) in zip(thermo, thermo[1:]):
@@ -285,12 +278,14 @@ class Solver:
                 else:
                     s.add(vars[r1][c1] > vars[r0][c0])
 
+    def _add_arrows(self, s, vars):
         # add arrow constraints
         for arrow in self._arrows:
             (hc, hr), arrow = arrow[0], arrow[1:]
 
             s.add(vars[hr][hc] == z3.Sum([vars[r][c] for c, r in arrow]))
 
+    def _add_kropkis(self, s, vars):
         # add kropki constraints
         for (c0, r0), (c1, r1) in self._black_kropkis:
             v0 = vars[r0][c0]
@@ -304,6 +299,7 @@ class Solver:
 
             s.add(z3.Or(v0 - v1 == 1, v1 - v0 == 1))
 
+    def _add_region_sum_lines(self, s, vars):
         # add region sum lines constraints
         for line in self._region_sum_lines:
             # divide up per region
@@ -321,6 +317,7 @@ class Solver:
                 s2 = z3.Sum([vars[r][c] for c, r in c2])
                 s.add(s1 == s2)
 
+    def _add_zipper_lines(self, s, vars):
         # add zipper line constraints
         for line in self._zipper_lines:
             middle_i = len(line) // 2
@@ -334,10 +331,12 @@ class Solver:
             for (c0, r0), (c1, r1) in zip(part1, part2):
                 s.add(vars[mr][mc] == vars[r0][c0] + vars[r1][c1])
 
+    def _add_smaller_than(self, s, vars):
         # add smaller-than constraints
         for (sc, sr), (lc, lr) in self._smaller_thans:
             s.add(vars[sr][sc] < vars[lr][lc])
 
+    def _add_killer_cages(self, s, vars):
         # add killer cage constraints
         for cage, sum, unique in self._killer_cages:
             if unique:
@@ -347,6 +346,7 @@ class Solver:
             if sum is not None:
                 s.add(sum == z3.Sum([vars[r][c] for c, r in cage]))
 
+    def _add_whisper_lines(self, s, vars):
         # add whisper line constraints
         for line, min_diff in self._whisper_lines:
             for (c0, r0), (c1, r1) in zip(line, line[1:]):
@@ -355,6 +355,7 @@ class Solver:
 
                 s.add(z3.Abs(v0 - v1) >= min_diff)
 
+    def _add_x_v(self, s, vars):
         # add X/V constraints
         for (c0, r0), (c1, r1), sum in self._x_v:
             v0 = vars[r0][c0]
@@ -370,6 +371,7 @@ class Solver:
                 s.add(v0 + v1 != 5)
                 s.add(v0 + v1 != 10)
 
+    def _add_renban_nabner_lines(self, s, vars):
         # add renban line constraints
         for line in self._renban_lines:
             cells = [vars[r][c] for c, r in line]
@@ -398,6 +400,7 @@ class Solver:
 
                     s.add(z3.Abs(c0 - c1) != 1)
 
+    def _add_anti_knight(self, s, vars):
         # add anti-knight constraint
         if self._anti_knight:
             for r in range(self._height):
@@ -409,6 +412,7 @@ class Solver:
                         if cc >= 0 and rr >= 0 and cc < self._width and rr < self._height:
                             s.add(vars[r][c] != vars[rr][cc])
 
+    def _add_anti_king(self, s, vars):
         # add anti-king constraint
         if self._anti_king:
             for r in range(self._height):
@@ -420,17 +424,20 @@ class Solver:
                         if cc >= 0 and rr >= 0 and cc < self._width and rr < self._height:
                             s.add(vars[r][c] != vars[rr][cc])
 
+    def _add_non_consecutive(self, s, vars):
         # add anti-consecutive constraint
         if self._anti_consecutive:
             for _, v0, _, v1 in self.all_dominos(vars):
                 s.add(z3.Abs(v0 - v1) != 1)
 
+    def _add_disjoint(self, s, vars):
         # add disjoint constraint
         if self._disjoint:
             for ss in zip(*self._regions):
                 cells = [vars[r][c] for c, r in ss]
                 s.add(z3.Distinct(cells))
 
+    def _add_entropic_lines(self, s, vars):
         # add entropic lines constraints
         for line in self._entropic_lines:
             def same_entropy(offset):
@@ -462,6 +469,7 @@ class Solver:
                 s.add((v1 - 1) / 3 != (v2 - 1) / 3)
                 s.add((v0 - 1) / 3 != (v2 - 1) / 3)
 
+    def _add_odd_evens(self, s, vars):
         # add odd/even constraints
         for c, r in self._odd_cells:
             s.add(vars[r][c] % 2 == 1)
@@ -469,6 +477,7 @@ class Solver:
         for c, r in self._even_cells:
             s.add(vars[r][c] % 2 == 0)
 
+    def _add_palindroms(self, s, vars):
         # add palindrom constraints
         for line in self._palindrom_lines:
             middle_i = len(line) // 2
@@ -483,6 +492,7 @@ class Solver:
             for (c0, r0), (c1, r1) in zip(part1, part2):
                 s.add(vars[r0][c0] == vars[r1][c1])
 
+    def _add_between_lines(self, s, vars):
         # add between line constraints
         for line in self._between_lines:
             xc, xr = line[0]
@@ -495,6 +505,7 @@ class Solver:
                 v = vars[r][c]
                 s.add(z3.Or(z3.And(v < xv, v > yv), z3.And(v > xv, v < yv)))
 
+    def _add_quadruples(self, s, vars):
         # add quadruple constraints
         for (c, r), digits in self._quadruples:
             # TODO add support for repeated digits in quadruples
@@ -509,6 +520,7 @@ class Solver:
 
             s.add(z3.And(constraints))
 
+    def _add_xsums(self, s, vars):
         # add xsum constraints
         def _xsums(cc, cr, sum, vr, max_x):
             vx = vars[cr][cc]
@@ -536,7 +548,112 @@ class Solver:
 
             _xsums(cc, cr, sum, vc, self._height)
 
-        # add any extra constraints
+    def _add_clones(self, s, vars):
+        for clone in self._clones:
+            vs = [vars[r][c] for c, r in clone]
+            for a, b in combinations(vs, 2):
+                s.add(a == b)
+
+    def _add_sandwhiches(self, s, vars):
+        def _sandwhiches(vs, size, low_digit, high_digit):
+            or_constraints = []
+            for low in range(0, size):
+                vlow = vs[low]
+
+                for high in range(0, size):
+                    if low == high:
+                        continue
+
+                    vhigh = vs[high]
+                    sub_vs = vs[min(low, high) + 1: max(low, high)]
+
+                    or_constraints.append(z3.And(vlow == low_digit, vhigh == high_digit, z3.Sum(sub_vs) == sum))
+
+            s.add(z3.Or(or_constraints))
+
+        # sandwhich rows
+        for (row, sum), low_digit, high_digit in self._sandwhich_rows:
+            vrow = vars[row]
+            _sandwhiches(vrow, self._width, low_digit, high_digit)
+
+        # sandwhich cols
+        for (col, sum), low_digit, high_digit in self._sandwhich_cols:
+            vcol = [vars[r][col] for r in range(0, self._height)]
+            _sandwhiches(vcol, self._height, low_digit, high_digit)
+
+    def solve(self):
+        s = z3.Solver()
+
+        # matrix of integer variables
+        vars = []
+        for r in range(self._height):
+            row = []
+            for c in range(self._width):
+                v = z3.Int("c%sr%s" % (c, r))
+                s.add(z3.Or([v == d for d in self._digits]))
+
+                row.append(v)
+
+            # each row contains a digit at most once
+            s.add(z3.Distinct(row))
+
+            vars.append(row)
+
+        # each column contains a digit at most once
+        for col in map(list, zip(*vars)):
+            s.add(z3.Distinct(col))
+
+        # add region constraints
+        for region in self._regions:
+            s.add(z3.Distinct([vars[r][c] for c, r in region]))
+
+        self._add_diagonals(s, vars)
+
+        self._add_thermos(s, vars)
+
+        self._add_arrows(s, vars)
+
+        self._add_kropkis(s, vars)
+
+        self._add_region_sum_lines(s, vars)
+
+        self._add_zipper_lines(s, vars)
+
+        self._add_smaller_than(s, vars)
+
+        self._add_killer_cages(s, vars)
+
+        self._add_whisper_lines(s, vars)
+
+        self._add_x_v(s, vars)
+
+        self._add_renban_nabner_lines(s, vars)
+
+        self._add_anti_knight(s, vars)
+
+        self._add_anti_king(s, vars)
+
+        self._add_non_consecutive(s, vars)
+
+        self._add_disjoint(s, vars)
+
+        self._add_entropic_lines(s, vars)
+
+        self._add_odd_evens(s, vars)
+
+        self._add_palindroms(s, vars)
+
+        self._add_between_lines(s, vars)
+
+        self._add_quadruples(s, vars)
+
+        self._add_xsums(s, vars)
+
+        self._add_clones(s, vars)
+
+        self._add_sandwhiches(s, vars)
+
+        # add extra constraints
         for extra_constraint in self._extra_constraints:
             extra_constraint(s, vars)
 
