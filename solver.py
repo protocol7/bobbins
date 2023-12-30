@@ -600,7 +600,7 @@ class Solver:
     def solve(self):
         s = z3.Solver()
 
-        # matrix of integer variables
+        # the board, made up of a list of list of integer variables
         vars = []
         for r in range(self._height):
             row = []
