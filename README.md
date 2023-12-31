@@ -33,8 +33,9 @@ Supports the following features:
 * Xsums
 * Sandwhiches
 * Clones
+* Magic squares
 
-Also supports adding custom constraints per solve. There are a fair amount of examples of these, e.g 10 sum lines, magic squares and thripples.
+Also supports adding custom constraints per solve. There are a fair amount of examples of these, e.g 10 sum lines, rotations and thripples.
 
 ## TODO
 

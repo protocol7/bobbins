@@ -58,7 +58,6 @@ def doublers(s, vars):
         placeholders.append(row)
 
     s.add(z3.Distinct([z3.If(multipliers[r][c] == 2, vars[r][c], placeholders[r][c]) for c, r in cs]))
-    #s.add(z3.Distinct([vars[r][c] for c, r in cs if z3.If(multipliers[r][c] == 2, True, False)]))
 
 
 

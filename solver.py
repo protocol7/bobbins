@@ -91,6 +91,7 @@ class Solver:
         self._clones = []
         self._sandwhich_rows = []
         self._sandwhich_cols = []
+        self._magic_squares = []
 
         self._extra_constraints = []
 
@@ -239,6 +240,11 @@ class Solver:
             self._sandwhich_rows.append((row, low_digit, high_digit))
         for col in cols:
             self._sandwhich_cols.append((col, low_digit, high_digit))
+        return self
+
+    # a list of center points of 3x3 magic squares
+    def magic_squares(self, centers):
+        self._magic_squares.extend(centers)
         return self
 
     # fn(solver, cells)
@@ -597,6 +603,28 @@ class Solver:
             vcol = [vars[r][col] for r in range(0, self._height)]
             _sandwhiches(vcol, self._height, low_digit, high_digit)
 
+    def _add_magic_squares(self, s, vars):
+        for c, r in self._magic_squares:
+            v0, v1, v2 = vars[r - 1][c - 1], vars[r - 1][c], vars[r - 1][c + 1]
+            v3, v4, v5 = vars[r][c - 1], vars[r][c], vars[r][c + 1]
+            v6, v7, v8 = vars[r + 1][c - 1], vars[r + 1][c], vars[r + 1][c + 1]
+
+            total = z3.Int("magic_square_%s_%s" % (c, r))
+
+            # rows
+            s.add(v0 + v1 + v2 == total)
+            s.add(v3 + v4 + v5 == total)
+            s.add(v6 + v7 + v8 == total)
+
+            # cols
+            s.add(v0 + v3 + v6 == total)
+            s.add(v1 + v4 + v7 == total)
+            s.add(v2 + v5 + v8 == total)
+
+            # diagonals
+            s.add(v0 + v4 + v8 == total)
+            s.add(v2 + v4 + v6 == total)
+
     def solve(self):
         s = z3.Solver()
 
@@ -668,6 +696,8 @@ class Solver:
         self._add_clones(s, vars)
 
         self._add_sandwhiches(s, vars)
+
+        self._add_magic_squares(s, vars)
 
         # add extra constraints
         for extra_constraint in self._extra_constraints:
