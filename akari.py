@@ -63,7 +63,7 @@ class Solver:
 
                     # if this is a light, then all seen can not be light, and are lit up
                     for nc, nr in seen:
-                        s.add(z3.If(v == 2, 2, 3) > vars[nr][nc])
+                        s.add(vars[nr][nc] < z3.If(v == 2, 2, 3))
 
                     # this is a light, or there must be at least one light in seen
                     s.add(z3.Or(
