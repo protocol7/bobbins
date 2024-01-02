@@ -647,6 +647,17 @@ class Solver:
         for col in map(list, zip(*vars)):
             s.add(z3.Distinct(col))
 
+        # verify regions are correct
+        seen = set()
+        for region in self._regions:
+            assert len(region) == len(self._digits)
+
+            # no duplicates
+            assert len(set(region) & seen) == 0, region
+            seen.update(region)
+
+        assert len(seen) == self._width * self._height
+
         # add region constraints
         for region in self._regions:
             s.add(z3.Distinct([vars[r][c] for c, r in region]))
