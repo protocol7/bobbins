@@ -20,6 +20,15 @@ class Solver:
     )
     EMPTY = EMPTY_9X9
 
+    EMPTY_6X6 = (
+        (_, _, _, _, _, _),
+        (_, _, _, _, _, _),
+        (_, _, _, _, _, _),
+        (_, _, _, _, _, _),
+        (_, _, _, _, _, _),
+        (_, _, _, _, _, _),
+    )
+
     EMPTY_4X4 = (
         (_, _, _, _),
         (_, _, _, _),
@@ -40,6 +49,15 @@ class Solver:
             ((6, 6), (7, 6), (8, 6), (6, 7), (7, 7), (8, 7), (6, 8), (7, 8), (8, 8)),
         ]
 
+    REGULAR_6X6_REGIONS = [
+            ((0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1)),
+            ((3, 0), (4, 0), (5, 0), (3, 1), (4, 1), (5, 1)),
+            ((0, 2), (1, 2), (2, 2), (0, 3), (1, 3), (2, 3)),
+            ((3, 2), (4, 2), (5, 2), (3, 3), (4, 3), (5, 3)),
+            ((0, 4), (1, 4), (2, 4), (0, 5), (1, 5), (2, 5)),
+            ((3, 4), (4, 4), (5, 4), (3, 5), (4, 5), (5, 5)),
+        ]
+
     REGULAR_4X4_REGIONS = [
             ((0, 0), (1, 0), (0, 1), (1, 1)),
             ((2, 0), (3, 0), (2, 1), (3, 1)),
@@ -53,6 +71,14 @@ class Solver:
             Solver(given=given, width=4, height=4)
             .digits(list(range(1, 4 + 1)))
             .regions(Solver.REGULAR_4X4_REGIONS)
+        )
+
+    @staticmethod
+    def regular_6x6(given=EMPTY_6X6):
+        return (
+            Solver(given=given, width=6, height=6)
+            .digits(list(range(1, 6 + 1)))
+            .regions(Solver.REGULAR_6X6_REGIONS)
         )
 
     def __init__(self, given=EMPTY_9X9, width=9, height=9):
@@ -261,7 +287,7 @@ class Solver:
 
             diagonal = []
             for r in range(self._height - 1, -1, -1):
-                c = 8 - r
+                c = (self._width - 1) - r
                 diagonal.append(vars[r][c])
 
             s.add(z3.Distinct(diagonal))
