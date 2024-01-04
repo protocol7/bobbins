@@ -81,8 +81,9 @@ def loop(
 
             # each cell is either:
             # * not part of the loop
-            # the start cell of the loop, and thus has the value 1
-            # some other cell on the loop, and thus have a connected cell with a lower value
+            # * the start cell of the loop, and thus has the value 1
+            # * some other cell on the loop, and thus must have a connected
+            #     cell with a lower value
             s.add(z3.Or(
                 v == 0,
                 z3.And(start_c == c, start_r == r, v == 1),
