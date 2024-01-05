@@ -108,20 +108,18 @@ def loop(
 
 
 def pretty_print(z3_solver, grid):
-    if z3_solver.check() == z3.sat:
-        m = z3_solver.model()
-        r = [[m.evaluate(grid[r][c]) for c in range(9)] for r in range(9)]
+    m = z3_solver.model()
+    r = [[m[grid[r][c]] for c in range(9)] for r in range(9)]
 
-        def pad(x):
-            if x.as_long() > 0:
-                return "#"
-            else:
-                return "."
+    def pad(x):
+        #return str(x).ljust(2)
+        if x.as_long() > 0:
+            return "#"
+        else:
+            return "."
 
-        for row in r:
-            print(" ".join(map(pad, row)))
-    else:
-        print("No solution")
+    for row in r:
+        print(" ".join(map(pad, row)))
 
 
 if __name__ == "__main__":

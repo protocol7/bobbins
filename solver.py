@@ -65,6 +65,8 @@ class Solver:
             ((2, 2), (3, 2), (2, 3), (3, 3)),
         ]
 
+    ORTHOGONAL = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+
     @staticmethod
     def regular_4x4(given=EMPTY_4X4):
         return (
@@ -749,8 +751,7 @@ class Solver:
         # solve
         if s.check() == z3.sat:
             m = s.model()
-            r = [[m.evaluate(vars[r][c]) for c in range(self._width)] for r in range(self._height)]
-            return r
+            return [[m[vars[r][c]] for c in range(self._width)] for r in range(self._height)]
         else:
             return None
 
@@ -766,6 +767,16 @@ class Solver:
                         v1 = vars[rr][cc]
 
                         yield (c, r), v0, (cc, rr), v1
+
+    def orthogonal(self, c, r):
+        for dc, dr in Solver.ORTHOGONAL:
+            cc = c + dc
+            rr = r + dr
+
+            if cc < 0 or rr < 0 or cc >= self._width or rr >= self._height:
+                continue
+
+            yield cc, rr
 
     @staticmethod
     def pretty_print(solution):
