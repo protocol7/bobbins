@@ -7,35 +7,15 @@ _ = None
 
 class Solver:
 
-    EMPTY_9X9 = (
-        (_, _, _, _, _, _, _, _, _),
-        (_, _, _, _, _, _, _, _, _),
-        (_, _, _, _, _, _, _, _, _),
-        (_, _, _, _, _, _, _, _, _),
-        (_, _, _, _, _, _, _, _, _),
-        (_, _, _, _, _, _, _, _, _),
-        (_, _, _, _, _, _, _, _, _),
-        (_, _, _, _, _, _, _, _, _),
-        (_, _, _, _, _, _, _, _, _),
-    )
+    def empty(width, height):
+        return [[None] * width for _ in range(height)]
+
+    EMPTY_9X9 = empty(9, 9)
     EMPTY = EMPTY_9X9
 
-    EMPTY_6X6 = (
-        (_, _, _, _, _, _),
-        (_, _, _, _, _, _),
-        (_, _, _, _, _, _),
-        (_, _, _, _, _, _),
-        (_, _, _, _, _, _),
-        (_, _, _, _, _, _),
-    )
+    EMPTY_6X6 = empty(6, 6)
 
-    EMPTY_4X4 = (
-        (_, _, _, _),
-        (_, _, _, _),
-        (_, _, _, _),
-        (_, _, _, _),
-        (_, _, _, _),
-    )
+    EMPTY_4X4 = empty(4, 4)
 
     REGULAR_9X9_REGIONS = [
             ((0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1), (0, 2), (1, 2), (2, 2)),
@@ -68,7 +48,7 @@ class Solver:
     ORTHOGONAL = [(0, -1), (1, 0), (0, 1), (-1, 0)]
 
     @staticmethod
-    def regular_4x4(given=EMPTY_4X4):
+    def regular_4x4(given=None):
         return (
             Solver(given=given, width=4, height=4)
             .digits(list(range(1, 4 + 1)))
@@ -76,15 +56,15 @@ class Solver:
         )
 
     @staticmethod
-    def regular_6x6(given=EMPTY_6X6):
+    def regular_6x6(given=None):
         return (
             Solver(given=given, width=6, height=6)
             .digits(list(range(1, 6 + 1)))
             .regions(Solver.REGULAR_6X6_REGIONS)
         )
 
-    def __init__(self, given=EMPTY_9X9, width=9, height=9):
-        self.given = given
+    def __init__(self, given=None, width=9, height=9):
+        self._given = given
         self._width = width
         self._height = height
         self._regions = Solver.REGULAR_9X9_REGIONS
@@ -676,19 +656,20 @@ class Solver:
             s.add(z3.Distinct(col))
 
         # verify regions are correct
-        seen = set()
-        for region in self._regions:
-            assert len(region) == len(self._digits)
+        if self._regions:
+            seen = set()
+            for region in self._regions:
+                assert len(region) == len(self._digits)
 
-            # no duplicates
-            assert len(set(region) & seen) == 0, region
-            seen.update(region)
+                # no duplicates
+                assert len(set(region) & seen) == 0, region
+                seen.update(region)
 
-        assert len(seen) == self._width * self._height
+            assert len(seen) == self._width * self._height
 
-        # add region constraints
-        for region in self._regions:
-            s.add(z3.Distinct([vars[r][c] for c, r in region]))
+            # add region constraints
+            for region in self._regions:
+                s.add(z3.Distinct([vars[r][c] for c, r in region]))
 
         self._add_diagonals(s, vars)
 
@@ -743,10 +724,11 @@ class Solver:
             extra_constraint(s, vars)
 
         # add givens
-        for r, row in enumerate(self.given):
-            for c, x in enumerate(row):
-                if x in self._digits:
-                    s.add(vars[r][c] == x)
+        if self._given:
+            for r, row in enumerate(self._given):
+                for c, x in enumerate(row):
+                    if x in self._digits:
+                        s.add(vars[r][c] == x)
 
         # solve
         if s.check() == z3.sat:

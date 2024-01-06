@@ -1,6 +1,5 @@
 import z3
-
-ORTHOGONAL = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+from utils import orthogonal, z3_count
 
 
 def loop(
@@ -18,7 +17,7 @@ def loop(
         for c in range(width):
             v = z3.Int("loop_%s_%s" % (c, r))
 
-            s.add(z3.Or(v >= 0))
+            s.add(v >= 0)
 
             row.append(v)
             vs.append(v)
@@ -43,19 +42,10 @@ def loop(
 
     for r, row in enumerate(grid):
         for c, v in enumerate(row):
-
-            ns = []
-            for dc, dr in ORTHOGONAL:
-                nc = c + dc
-                nr = r + dr
-
-                if nc < 0 or nr < 0 or nc >= width or nr >= height:
-                    continue
-
-                ns.append(grid[nr][nc])
+            ns = [grid[nr][nc] for nc, nr in orthogonal(grid, c, r)]
 
             # all loop cells must have exactly two orthogonal neighbours
-            count = z3.Sum([z3.If(nv > 0, 1, 0) for nv in ns])
+            count = z3_count(lambda nv: nv > 0, ns)
             s.add(z3.Or(
                 v == 0,
                 z3.And(v > 0, count == 2)
@@ -127,7 +117,8 @@ if __name__ == "__main__":
     MUST_INCLUDE = [(0, 0), (4, 0), (8, 0), (7, 2), (0, 4), (8, 4), (1, 5), (0, 8), (3, 8), (5, 8), (7, 8)]
 
     grid = loop(s, must_include_cells=MUST_INCLUDE)
-    #from solver import Solver
-    #grid = loop(s, must_include_regions=Solver.REGULAR_9X9_REGIONS)
 
-    pretty_print(s, grid)
+    if s.check() == z3.sat:
+        pretty_print(s, grid)
+    else:
+        print("No solution")
