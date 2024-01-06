@@ -4,11 +4,16 @@ from utils import orthogonal
 
 def regions(
         s,
-        sizes,
+        sizes=None,
         region_widths=None,
         region_heights=None,
         grid_width=9,
         grid_height=9):
+
+    if sizes is None:
+        assert grid_width == grid_height
+
+        sizes = [grid_width] * grid_width
 
     grids = []
     # create one grid per region

@@ -1,10 +1,21 @@
 import z3
 
 ORTHOGONAL = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+CORNERS = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+ADJACENT = ORTHOGONAL + CORNERS
+ADJACENT_WITH_CELL = ADJACENT + [(0, 0)]
 
 
 def orthogonal(grid, c, r):
-    for dc, dr in ORTHOGONAL:
+    return _neighbours(grid, c, r, ORTHOGONAL)
+
+
+def adjacent_with_cell(grid, c, r):
+    return _neighbours(grid, c, r, ADJACENT_WITH_CELL)
+
+
+def _neighbours(grid, c, r, neighbours):
+    for dc, dr in neighbours:
         cc = c + dc
         rr = r + dr
 
@@ -12,7 +23,6 @@ def orthogonal(grid, c, r):
             continue
 
         yield cc, rr
-
 
 def z3_count(predicate, vs):
     return z3.Sum([z3.If(predicate(v), 1, 0) for v in vs])
