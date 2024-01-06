@@ -34,13 +34,12 @@ def negative(s, vars):
                 s.add(v + vars[rr][cc] != 10)
 
             for dc0, dr0, dc1, dr1 in [
-                (1, 0, 2, 0), # horisontal
-                (0, 1, 0, 2), # vertical
-                (0, 1, 1, 0), # bend with middle
-                # (1, 0, 1, -1), # bend right-up
-                # (1, 0, 1, 1), # bend right-down
-                # (0, 1, -1, 1), # bend down-left
-                # (0, 1, 1, 1), # bend down-right
+                (1, 0, 2, 0),  # horisontal
+                (0, 1, 0, 2),  # vertical
+                (1, 0, 1, -1),  # bend right-up
+                (1, 0, 1, 1),  # bend right-down
+                (0, 1, -1, 1),  # bend down-left
+                (0, 1, 1, 1),  # bend down-right
             ]:
                 cc0 = c + dc0
                 rr0 = r + dr0
@@ -52,14 +51,18 @@ def negative(s, vars):
 
                 trio = set([(c, r), (cc0, rr0), (cc1, rr1)])
                 if trio in CAGES:
-                    print((c, r), (cc0, rr0), (cc1, rr1))
                     continue
 
                 v0 = vars[rr0][cc0]
                 v1 = vars[rr1][cc1]
 
-                #print(v, v0, v1)
-                s.add(v + v0 + v1 != 10)
+                # if digits in a cage repeat, it is not a killer cage!
+                s.add(z3.Or(
+                    v == v0,
+                    v == v1,
+                    v0 == v1,
+                    v + v0 + v1 != 10
+                ))
 
 
 solver.whisper_lines([
