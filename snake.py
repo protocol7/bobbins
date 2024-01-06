@@ -1,5 +1,7 @@
 import z3
-from utils import orthogonal
+from utils import orthogonal, z3_count
+
+snakes_counter = 0
 
 
 def snake(
@@ -10,12 +12,14 @@ def snake(
         must_include_regions=[],
         dont_touch_diagonally=True):
 
+    global snakes_counter
+
     grid = []
     vs = []
     for r in range(height):
         row = []
         for c in range(width):
-            v = z3.Int("snake_%s_%s" % (c, r))
+            v = z3.Int("snake_%s_%s_%s" % (snakes_counter, c, r))
 
             s.add(v >= 0)
 
@@ -37,17 +41,21 @@ def snake(
         s.add(z3.Or(or_constraints))
 
     # start and end cells
-    start_c = z3.Int("start_c")
-    start_r = z3.Int("start_r")
+    start_c = z3.Int("start_c_%s" % snakes_counter)
+    start_r = z3.Int("start_r_%s" % snakes_counter)
 
     s.add(start_c >= 0, start_c < width)
     s.add(start_r >= 0, start_r < height)
 
-    end_c = z3.Int("end_c")
-    end_r = z3.Int("end_r")
+    end_c = z3.Int("end_c_%s" % snakes_counter)
+    end_r = z3.Int("end_r_%s" % snakes_counter)
 
     s.add(end_c >= 0, end_c < width)
     s.add(end_r >= 0, end_r < height)
+
+    # snake must be at least 2 cells long
+    gs = [g for row in grid for g in row]
+    s.add(z3_count(lambda s: s > 0, gs) >= 2)
 
     # not a loop
     s.add(z3.Not(z3.And(start_c == end_c, start_r == end_r)))
@@ -71,18 +79,6 @@ def snake(
             #
             # https://www.cs.ru.nl/bachelors-theses/2021/Gerhard_van_der_Knijff___1006946___Solving_and_generating_puzzles_with_a_connectivity_constraint.pdf
 
-            # or_constraints = []
-            # for i in range(len(ns)):
-            #     for j in range(len(ns)):
-            #         if i == j:
-            #             continue
-
-            #         or_constraints.append(z3.And(
-            #             v > 1,
-            #             ns[i] > 0,
-            #             ns[j] > 0,
-            #             z3.Or(ns[i] < v, ns[j] < v))
-            #         )
             lower_neighbour_count = z3.Sum([z3.If(z3.And(nv > 0, nv < v), 1, 0) for nv in ns])
 
             # each cell is either:
@@ -94,9 +90,6 @@ def snake(
                 v == 0,
                 z3.And(start_c == c, start_r == r, v == 1),
                 lower_neighbour_count > 0
-                # z3.Or(
-                #     or_constraints
-                # )
             ))
 
     if dont_touch_diagonally:
@@ -110,6 +103,8 @@ def snake(
                 # no checker-boards (diagonal touches)
                 s.add(z3.Not(z3.And(v0 > 0, v1 == 0, v2 == 0, v3 > 0)))
                 s.add(z3.Not(z3.And(v0 == 0, v1 > 0, v2 > 0, v3 == 0)))
+
+    snakes_counter += 1
 
     return grid, (start_c, start_r), (end_c, end_r)
 
