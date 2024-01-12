@@ -6,15 +6,15 @@ ADJACENT = ORTHOGONAL + CORNERS
 ADJACENT_WITH_CELL = ADJACENT + [(0, 0)]
 
 
-def orthogonal(grid, c, r):
+def orthogonal(grid, c, r) -> tuple[int, int]:
     return _neighbours(grid, c, r, ORTHOGONAL)
 
 
-def adjacent_with_cell(grid, c, r):
+def adjacent_with_cell(grid, c, r) -> tuple[int, int]:
     return _neighbours(grid, c, r, ADJACENT_WITH_CELL)
 
 
-def _neighbours(grid, c, r, neighbours):
+def _neighbours(grid, c, r, neighbours) -> tuple[int, int]:
     for dc, dr in neighbours:
         cc = c + dc
         rr = r + dr

@@ -39,7 +39,8 @@ def regions(
         vs = [v for row in grid for v in row]
 
         # the region must have the provided size
-        s.add(count_snake(vs) == size)
+        if size:
+            s.add(count_snake(vs) == size)
 
         if region_widths:
             # the region must have a certain width, check each row for either
@@ -93,15 +94,16 @@ def regions(
                 ))
 
     # regions must not overlap
-    for r in range(grid_height):
-        for c in range(grid_width):
-            vs = [grid[r][c] for grid in grids]
+    if len(grids) > 1:
+        for r in range(grid_height):
+            for c in range(grid_width):
+                vs = [grid[r][c] for grid in grids]
 
-            count = count_snake(vs)
-            if sum(sizes) == grid_height * grid_width:
-                s.add(count == 1)
-            else:
-                s.add(z3.Or(count == 1, count == 0))
+                count = count_snake(vs)
+                if sum(sizes) == grid_height * grid_width:
+                    s.add(count == 1)
+                else:
+                    s.add(z3.Or(count == 1, count == 0))
 
     return grids
 

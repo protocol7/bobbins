@@ -75,6 +75,7 @@ class Solver:
         self._arrows = []
         self._black_kropkis = []
         self._white_kropkis = []
+        self._white_kropkis_anti = False
         self._region_sum_lines = []
         self._zipper_lines = []
         self._smaller_thans = []
@@ -137,10 +138,11 @@ class Solver:
         self._black_kropkis.extend(dots)
         return self
 
-    def white_kropkis(self, dots):
+    def white_kropkis(self, dots, anti=False):
         assert all(len(d) == 2 for d in dots)
 
         self._white_kropkis.extend(dots)
+        self._white_kropkis_anti = anti
         return self
 
     def region_sum_line(self, line):
@@ -180,6 +182,14 @@ class Solver:
 
     def v(self, cell1, cell2):
         self._x_v.append((cell1, cell2, 5))
+        return self
+
+    def xs(self, pairs):
+        self._x_v.extend((cell1, cell2, 10) for cell1, cell2 in pairs)
+        return self
+
+    def vs(self, pairs):
+        self._x_v.extend((cell1, cell2, 5) for cell1, cell2 in pairs)
         return self
 
     def renban_lines(self, lines):
@@ -307,11 +317,21 @@ class Solver:
 
             s.add(z3.Or(v0 * 2 == v1, v1 * 2 == v0))
 
+        whites = set()
         for (c0, r0), (c1, r1) in self._white_kropkis:
+            whites.add(frozenset([(c0, r0), (c1, r1)]))
             v0 = vars[r0][c0]
             v1 = vars[r1][c1]
 
             s.add(z3.Or(v0 - v1 == 1, v1 - v0 == 1))
+
+        if self._white_kropkis_anti:
+            for (c0, r0), v0, (c1, r1), v1 in self.all_dominos(vars):
+                k = frozenset([(c0, r0), (c1, r1)])
+                if k in whites:
+                    continue
+
+                s.add(z3.And(z3.Abs(v0 - v1) != 1))
 
     def _add_region_sum_lines(self, s, vars):
         # add region sum lines constraints
