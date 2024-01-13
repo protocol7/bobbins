@@ -326,19 +326,19 @@ class Solver:
 
             s.add(vars[hr][hc] == z3.Sum([vars[r][c] for c, r in arrow]))
 
-    def _add_kropkis(self, s, vars):
+    def _add_kropkis(self, s, vars, multipliers):
         # add kropki constraints
         for (c0, r0), (c1, r1) in self._black_kropkis:
-            v0 = vars[r0][c0]
-            v1 = vars[r1][c1]
+            v0 = vars[r0][c0] * multipliers[r0][c0]
+            v1 = vars[r1][c1] * multipliers[r1][c1]
 
             s.add(z3.Or(v0 * 2 == v1, v1 * 2 == v0))
 
         whites = set()
         for (c0, r0), (c1, r1) in self._white_kropkis:
             whites.add(frozenset([(c0, r0), (c1, r1)]))
-            v0 = vars[r0][c0]
-            v1 = vars[r1][c1]
+            v0 = vars[r0][c0] * multipliers[r0][c0]
+            v1 = vars[r1][c1] * multipliers[r1][c1]
 
             s.add(z3.Or(v0 - v1 == 1, v1 - v0 == 1))
 
@@ -347,6 +347,9 @@ class Solver:
                 k = frozenset([(c0, r0), (c1, r1)])
                 if k in whites:
                     continue
+
+                v0 = v0 * multipliers[r0][c0]
+                v1 = v1 * multipliers[r1][c1]
 
                 s.add(z3.And(z3.Abs(v0 - v1) != 1))
 
@@ -368,7 +371,7 @@ class Solver:
                 s2 = z3.Sum([vars[r][c] for c, r in c2])
                 s.add(s1 == s2)
 
-    def _add_zipper_lines(self, s, vars):
+    def _add_zipper_lines(self, s, vars, multipliers):
         # add zipper line constraints
 
         # Digits an equal distance from the centre of a
@@ -385,7 +388,7 @@ class Solver:
                 assert len(part1) == len(part2)
 
                 mc, mr = line[middle_i]
-                vsum = vars[mr][mc]
+                vsum = vars[mr][mc] * multipliers[mr][mc]
             else:
                 middle_i = len(line) // 2
                 part1 = line[:middle_i][::-1]
@@ -396,7 +399,7 @@ class Solver:
                 vsum = z3.Int("zipper_%s" % i)
 
             for (c0, r0), (c1, r1) in zip(part1, part2):
-                s.add(vsum == vars[r0][c0] + vars[r1][c1])
+                s.add(vsum == vars[r0][c0] * multipliers[r0][c0] + vars[r1][c1] * multipliers[r1][c1])
 
     def _add_smaller_than(self, s, vars):
         # add smaller-than constraints
@@ -415,12 +418,12 @@ class Solver:
             if sum is not None:
                 s.add(sum == z3.Sum(vs))
 
-    def _add_whisper_lines(self, s, vars):
+    def _add_whisper_lines(self, s, vars, multipliers):
         # add whisper line constraints
         for line, min_diff in self._whisper_lines:
             for (c0, r0), (c1, r1) in zip(line, line[1:]):
-                v0 = vars[r0][c0]
-                v1 = vars[r1][c1]
+                v0 = vars[r0][c0] * multipliers[r0][c0]
+                v1 = vars[r1][c1] * multipliers[r1][c1]
 
                 s.add(z3.Abs(v0 - v1) >= min_diff)
 
@@ -776,17 +779,17 @@ class Solver:
 
         self._add_arrows(s, vars)
 
-        self._add_kropkis(s, vars)
+        self._add_kropkis(s, vars, multipliers)
 
         self._add_region_sum_lines(s, vars)
 
-        self._add_zipper_lines(s, vars)
+        self._add_zipper_lines(s, vars, multipliers)
 
         self._add_smaller_than(s, vars)
 
         self._add_killer_cages(s, vars, multipliers)
 
-        self._add_whisper_lines(s, vars)
+        self._add_whisper_lines(s, vars, multipliers)
 
         self._add_x_v(s, vars)
 
@@ -844,8 +847,6 @@ class Solver:
         # solve
         if s.check() == z3.sat:
             return Solution(self, s, vars, multipliers)
-            m = s.model()
-            return [[m[vars[r][c]] for c in range(self._width)] for r in range(self._height)]
         else:
             return None
 
