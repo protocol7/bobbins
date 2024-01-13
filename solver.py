@@ -1,11 +1,15 @@
 import z3
 from collections import defaultdict
 from itertools import combinations
+from utils import z3_count
 
 _ = None
 
 
 class Solver:
+
+    def grid(width, height, value=None):
+        return [[value] * width for _ in range(height)]
 
     def empty(width, height):
         return [[None] * width for _ in range(height)]
@@ -101,6 +105,8 @@ class Solver:
         self._sandwhich_rows = []
         self._sandwhich_cols = []
         self._magic_squares = []
+        self._circles = []
+        self._multiplier = (1, False, False, False, False)
 
         self._extra_constraints = []
 
@@ -265,9 +271,19 @@ class Solver:
         self._magic_squares.extend(centers)
         return self
 
+    def circles(self, circles):
+        """A digit in a circled cell indicates the total number of times that
+           digit appears in circled cells in the grid"""
+        self._circles.extend(circles)
+        return self
+
+    def multipliers(self, multiplier, one_per_row=True, one_per_col=True, one_per_region=True, unique=True):
+        self._multiplier = (multiplier, one_per_row, one_per_col, one_per_region, unique)
+        return self
+
     # fn(solver, cells)
-    def extra_constraint(self, fn):
-        self._extra_constraints.append(fn)
+    def extra_constraint(self, fn, with_multipliers=False):
+        self._extra_constraints.append((fn, with_multipliers))
         return self
 
     # here are methods for adding each type of constraint
@@ -293,14 +309,15 @@ class Solver:
 
             s.add(z3.Distinct(diagonal))
 
-    def _add_thermos(self, s, vars):
+    def _add_thermos(self, s, vars, multipliers):
         # add thermo constraints
         for thermo, slow in self._thermos:
-            for (c0, r0), (c1, r1) in zip(thermo, thermo[1:]):
+            vs = [vars[r][c] * multipliers[r][c] for c, r in thermo]
+            for v0, v1 in zip(vs, vs[1:]):
                 if slow:
-                    s.add(vars[r1][c1] >= vars[r0][c0])
+                    s.add(v1 >= v0)
                 else:
-                    s.add(vars[r1][c1] > vars[r0][c0])
+                    s.add(v1 > v0)
 
     def _add_arrows(self, s, vars):
         # add arrow constraints
@@ -386,15 +403,17 @@ class Solver:
         for (sc, sr), (lc, lr) in self._smaller_thans:
             s.add(vars[sr][sc] < vars[lr][lc])
 
-    def _add_killer_cages(self, s, vars):
+    def _add_killer_cages(self, s, vars, multipliers):
         # add killer cage constraints
+        # supports multiplers
         for cage, sum, unique in self._killer_cages:
+            vs = [vars[r][c] * multipliers[r][c] for c, r in cage]
             if unique:
                 # digits in the cage must be unique
-                s.add(z3.Distinct([vars[r][c] for c, r in cage]))
+                s.add(z3.Distinct(vs))
 
             if sum is not None:
-                s.add(sum == z3.Sum([vars[r][c] for c, r in cage]))
+                s.add(sum == z3.Sum(vs))
 
     def _add_whisper_lines(self, s, vars):
         # add whisper line constraints
@@ -421,34 +440,35 @@ class Solver:
                 s.add(v0 + v1 != 5)
                 s.add(v0 + v1 != 10)
 
-    def _add_renban_nabner_lines(self, s, vars):
+    def _add_renban_nabner_lines(self, s, vars, multipliers):
         # add renban line constraints
+        # supports multiplers
         for line in self._renban_lines:
-            cells = [vars[r][c] for c, r in line]
+            vs = [vars[r][c] * multipliers[r][c] for c, r in line]
             # must by unique
-            s.add(z3.Distinct(cells))
+            s.add(z3.Distinct(vs))
 
             # must be consecutive
-            for i, c0 in enumerate(cells):
-                for j, c1 in enumerate(cells):
+            for i, v0 in enumerate(vs):
+                for j, v1 in enumerate(vs):
                     if i >= j:
                         continue
 
-                    s.add(z3.Abs(c0 - c1) < len(line))
+                    s.add(z3.Abs(v0 - v1) < len(line))
 
         # add nabner line constraints
         for line in self._nabner_lines:
-            cells = [vars[r][c] for c, r in line]
+            vs = [vars[r][c] * multipliers[r][c] for c, r in line]
             # must by unique
-            s.add(z3.Distinct(cells))
+            s.add(z3.Distinct(vs))
 
             # must not be consecutive
-            for i, c0 in enumerate(cells):
-                for j, c1 in enumerate(cells):
+            for i, v0 in enumerate(vs):
+                for j, v1 in enumerate(vs):
                     if i >= j:
                         continue
 
-                    s.add(z3.Abs(c0 - c1) != 1)
+                    s.add(z3.Abs(v0 - v1) != 1)
 
     def _add_anti_knight(self, s, vars):
         # add anti-knight constraint
@@ -653,6 +673,63 @@ class Solver:
             s.add(v0 + v4 + v8 == total)
             s.add(v2 + v4 + v6 == total)
 
+    def _add_circles(self, s, vars):
+        for digit in self._digits:
+            count = z3.Sum([z3.If(vars[r][c] == digit, 1, 0) for c, r in self._circles])
+            s.add(z3.Or(count == digit, count == 0))
+
+    def _multipliers(self, s, vars):
+        multiplier, one_per_row, one_per_col, one_per_region, unique = self._multiplier
+
+        multipliers = []
+        for r in range(self._height):
+            row = []
+            for c in range(self._width):
+                v = z3.Int("multiplier_%s_%s" % (c, r))
+                s.add(z3.Or(v == 1, v == multiplier))
+
+                row.append(v)
+
+            multipliers.append(row)
+
+        if one_per_row:
+            for row in multipliers:
+                # one multiplier per row
+                s.add(z3_count(lambda v: v == multiplier, row) == 1)
+
+        if one_per_col:
+            for col in map(list, zip(*multipliers)):
+                # one multiplier per col
+                s.add(z3_count(lambda v: v == multiplier, col) == 1)
+
+        if one_per_region:
+            for region in self._regions:
+                vs = [multipliers[r][c] for c, r in region]
+
+                # one multiplier per region
+                s.add(z3_count(lambda v: v == multiplier, vs) == 1)
+
+        if unique:
+            # multipliers must be distinct
+            cs = []
+            placeholders = []
+            p_value = 1000
+            for r in range(self._height):
+                row = []
+                for c in range(self._width):
+                    cs.append((c, r))
+
+                    p = z3.Int("multiplier_placeholder_%s_%s" % (c, r))
+                    s.add(p == p_value)
+                    p_value += 1
+                    row.append(p)
+
+                placeholders.append(row)
+
+            s.add(z3.Distinct([z3.If(multipliers[r][c] == multiplier, vars[r][c], placeholders[r][c]) for c, r in cs]))
+
+        return multipliers
+
     def solve(self):
         s = z3.Solver()
 
@@ -691,9 +768,11 @@ class Solver:
             for region in self._regions:
                 s.add(z3.Distinct([vars[r][c] for c, r in region]))
 
+        multipliers = self._multipliers(s, vars)
+
         self._add_diagonals(s, vars)
 
-        self._add_thermos(s, vars)
+        self._add_thermos(s, vars, multipliers)
 
         self._add_arrows(s, vars)
 
@@ -705,13 +784,13 @@ class Solver:
 
         self._add_smaller_than(s, vars)
 
-        self._add_killer_cages(s, vars)
+        self._add_killer_cages(s, vars, multipliers)
 
         self._add_whisper_lines(s, vars)
 
         self._add_x_v(s, vars)
 
-        self._add_renban_nabner_lines(s, vars)
+        self._add_renban_nabner_lines(s, vars, multipliers)
 
         self._add_anti_knight(s, vars)
 
@@ -739,9 +818,14 @@ class Solver:
 
         self._add_magic_squares(s, vars)
 
+        self._add_circles(s, vars)
+
         # add extra constraints
-        for extra_constraint in self._extra_constraints:
-            extra_constraint(s, vars)
+        for extra_constraint, with_multipliers in self._extra_constraints:
+            if with_multipliers:
+                extra_constraint(s, vars, multipliers)
+            else:
+                extra_constraint(s, vars)
 
         # add givens
         if self._given:
@@ -750,8 +834,16 @@ class Solver:
                     if x in self._digits:
                         s.add(vars[r][c] == x)
 
+        class Solution:
+            def __init__(self, solver, z3_solver, vars, multipliers):
+                self.solver = solver
+                self.z3_solver = z3_solver
+                self.grid = vars
+                self.multipliers = multipliers
+
         # solve
         if s.check() == z3.sat:
+            return Solution(self, s, vars, multipliers)
             m = s.model()
             return [[m[vars[r][c]] for c in range(self._width)] for r in range(self._height)]
         else:
@@ -786,5 +878,24 @@ class Solver:
             print("No solution")
             return
 
-        for row in solution:
+        m = solution.z3_solver.model()
+        vars = solution.grid
+        grid = [[m[vars[r][c]] for c in range(len(vars[0]))] for r in range(len(vars))]
+
+        for row in grid:
             print(" ".join(map(str, row)))
+
+        if solution.solver._multiplier[0] > 1:
+            print()
+
+            mvars = solution.multipliers
+            grid = [[m[mvars[r][c]] for c in range(len(mvars[0]))] for r in range(len(mvars))]
+
+            for row in grid:
+                s = []
+                for v in row:
+                    if v.as_long() > 1:
+                        s += str(v.as_long())
+                    else:
+                        s += "."
+                print(" ".join(s))
