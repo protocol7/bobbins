@@ -68,12 +68,6 @@ def _regions(s, vars):
         s.add(z3.And(and_constraints))
 
 
-def circles(s, vars):
-    for digit in range(1, 10):
-        count = z3.Sum([z3.If(vars[r][c] == digit, 1, 0) for c, r in CIRCLES])
-        s.add(z3.Or(count == digit, count == 0))
-
-
 solver = (
     Solver(width=8, height=8)
     .digits(DIGITS)
@@ -86,7 +80,7 @@ solver = (
         [(5, 6), (6, 6)],
         [(6, 7), (7, 7)],
     ])
-    .extra_constraint(circles)
+    .circles(CIRCLES)
     .extra_constraint(_regions)
 )
 

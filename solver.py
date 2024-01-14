@@ -329,6 +329,7 @@ class Solver:
     def _add_kropkis(self, s, vars, multipliers):
         # add kropki constraints
         for (c0, r0), (c1, r1) in self._black_kropkis:
+            assert (c0, r0) != (c1, r1)
             v0 = vars[r0][c0] * multipliers[r0][c0]
             v1 = vars[r1][c1] * multipliers[r1][c1]
 
@@ -336,6 +337,7 @@ class Solver:
 
         whites = set()
         for (c0, r0), (c1, r1) in self._white_kropkis:
+            assert (c0, r0) != (c1, r1)
             whites.add(frozenset([(c0, r0), (c1, r1)]))
             v0 = vars[r0][c0] * multipliers[r0][c0]
             v1 = vars[r1][c1] * multipliers[r1][c1]
@@ -409,7 +411,10 @@ class Solver:
     def _add_killer_cages(self, s, vars, multipliers):
         # add killer cage constraints
         # supports multiplers
+        seen = set()
         for cage, sum, unique in self._killer_cages:
+            assert not set(cage) & seen
+            seen.update(cage)
             vs = [vars[r][c] * multipliers[r][c] for c, r in cage]
             if unique:
                 # digits in the cage must be unique

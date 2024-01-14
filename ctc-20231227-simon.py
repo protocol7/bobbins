@@ -1,5 +1,4 @@
 from solver import Solver
-import z3
 
 # https://www.youtube.com/watch?v=2gsHqiAPj8g
 
@@ -10,18 +9,6 @@ ZIPPER_LINES = [
     [(4, 6), (5, 6), (6, 5), (6, 4)],
 ]
 LINES = PALINDROM + [x for xx in ZIPPER_LINES for x in xx]
-
-
-def z3_count(predicate, xs):
-    return z3.Sum([z3.If(predicate(x), 1, 0) for x in xs])
-
-
-def circles(s, vars):
-    vlines = [vars[r][c] for c, r in LINES]
-    for d in range(1, 10):
-        # count in lines must be either the same as the digit, or 0
-        s.add(z3.Or([z3_count(lambda v: v == d, vlines) == sum for sum in [0, d]]))
-
 
 s = (
     Solver(Solver.EMPTY)
@@ -39,7 +26,7 @@ s = (
     .killer_cage([(6, 7), (6, 8), (5, 8)], 23)
     .palindrom_lines([PALINDROM])
     .zipper_lines(ZIPPER_LINES)
-    .extra_constraint(circles)
+    .circles(LINES)
 )
 solution = s.solve()
 

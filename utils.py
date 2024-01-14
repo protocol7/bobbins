@@ -24,5 +24,13 @@ def _neighbours(grid, c, r, neighbours) -> tuple[int, int]:
 
         yield cc, rr
 
+
 def z3_count(predicate, vs):
     return z3.Sum([z3.If(predicate(v), 1, 0) for v in vs])
+
+
+def z3_max(vs):
+    m = vs[0]
+    for v in vs[1:]:
+        m = z3.If(v > m, v, m)
+    return m
