@@ -34,6 +34,9 @@ Supports the following features:
 * Sandwhiches
 * Clones
 * Magic squares
+* Self-counting circles
+* Doublers (only implemented for some other constraints)
+* Fog of war (only implemented for some other constraints)
 
 Also supports adding custom constraints per solve. There are a fair amount of examples of these, e.g 10 sum lines, rotations and thripples.
 

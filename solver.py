@@ -1,9 +1,17 @@
 import z3
 from collections import defaultdict
 from itertools import combinations
-from utils import z3_count
+from utils import z3_count, adjacent_with_cell
 
 _ = None
+
+
+class Solution:
+    def __init__(self, solver, z3_solver, vars, multipliers):
+        self.solver = solver
+        self.z3_solver = z3_solver
+        self.grid = vars
+        self.multipliers = multipliers
 
 
 class Solver:
@@ -107,6 +115,8 @@ class Solver:
         self._magic_squares = []
         self._circles = []
         self._multiplier = (1, False, False, False, False)
+        self._visible = None
+        self._var_counter = 0
 
         self._extra_constraints = []
 
@@ -128,6 +138,11 @@ class Solver:
 
     def thermo(self, thermo, slow=False):
         self._thermos.append((thermo, slow))
+        return self
+
+    def thermos(self, thermos, slow=False):
+        for thermo in thermos:
+            self._thermos.append((thermo, slow))
         return self
 
     def arrow(self, arrow):
@@ -277,6 +292,14 @@ class Solver:
         self._circles.extend(circles)
         return self
 
+    def visible(self, visible):
+        """ initially visible cells for fog of war """
+
+        if self._visible is None:
+            self._visible = set()
+        self._visible.update(visible)
+        return self
+
     def multipliers(self, multiplier, one_per_row=True, one_per_col=True, one_per_region=True, unique=True):
         self._multiplier = (multiplier, one_per_row, one_per_col, one_per_region, unique)
         return self
@@ -285,6 +308,33 @@ class Solver:
     def extra_constraint(self, fn, with_multipliers=False):
         self._extra_constraints.append((fn, with_multipliers))
         return self
+
+    def _filter_line_by_visibility(self, line, visible):
+        # returns the visible parts of the line, which includes cells into the
+        # line can be seen going.
+
+        out = set()
+        c_vis = 0
+        for i, (c, r) in enumerate(line):
+            if (c, r) in visible:
+                out.add((c, r))
+                c_vis += 1
+
+                if i > 0:
+                    out.add(line[i - 1])
+                if i + 1 < len(line):
+                    out.add(line[i + 1])
+
+        # the visible part of the line, and a bool that is true if some part
+        # is is not fully visible
+        return [x for x in line if x in out], c_vis != len(line)
+
+    def sudoku_digit(self, s):
+        self._var_counter += 1
+        v = z3.Int("digit_%s" % self._var_counter)
+        s.add(v >= 1, v <= 9)
+
+        return v
 
     # here are methods for adding each type of constraint
 
@@ -309,27 +359,80 @@ class Solver:
 
             s.add(z3.Distinct(diagonal))
 
-    def _add_thermos(self, s, vars, multipliers):
+    def _add_thermos(self, s, vars, multipliers, visible):
+
+        def dist(c0, r0, c1, r1):
+            dc = abs(c0 - c1)
+            dr = abs(r0 - r1)
+
+            return max(dc, dr)
+
         # add thermo constraints
         for thermo, slow in self._thermos:
-            vs = [vars[r][c] * multipliers[r][c] for c, r in thermo]
-            for v0, v1 in zip(vs, vs[1:]):
-                if slow:
-                    s.add(v1 >= v0)
-                else:
-                    s.add(v1 > v0)
+            visible_thermo, _ = self._filter_line_by_visibility(thermo, visible)
+            ends_visible = thermo[0] in visible or thermo[-1] in visible
 
-    def _add_arrows(self, s, vars):
+            if visible_thermo:
+                # print("thermo visible", thermo, ends_visible)
+
+                forward = []
+                backwards = []
+                for (c0, r0), (c1, r1) in zip(visible_thermo, visible_thermo[1:]):
+                    v0 = vars[r0][c0] * multipliers[r0][c0]
+                    v1 = vars[r1][c1] * multipliers[r1][c1]
+                    d = dist(c0, r0, c1, r1)
+
+                    if slow:
+                        # TODO take distance into account somehow
+                        forward.append(v1 >= v0)
+                        backwards.append(v1 <= v0)
+                    else:
+                        forward.append(v1 - v0 >= d)
+                        backwards.append(v0 - v1 >= d)
+
+                if ends_visible:
+                    # if at least one end is visible, we know the order
+                    s.add(z3.And(forward))
+                else:
+                    # otherwise, the thermo can be in either order
+                    s.add(z3.Or(
+                        z3.And(forward),
+                        z3.And(backwards),
+                    ))
+
+    def _add_arrows(self, s, vars, visible):
         # add arrow constraints
         for arrow in self._arrows:
             (hc, hr), arrow = arrow[0], arrow[1:]
 
-            s.add(vars[hr][hc] == z3.Sum([vars[r][c] for c, r in arrow]))
+            head_visible = (hc, hr) in visible
+            visible_arrow, partial = self._filter_line_by_visibility(arrow, visible)
 
-    def _add_kropkis(self, s, vars, multipliers):
+            if head_visible and not partial:
+                # full arrow is visible
+                # print("full arrow", (hc, hr), arrow)
+                s.add(vars[hr][hc] == z3.Sum([vars[r][c] for c, r in visible_arrow]))
+            elif head_visible:
+                # print("partial arrow, head visible", (hc, hr), arrow)
+                # arrow is partial, head is at least the sum of the visible parts
+                s.add(vars[hr][hc] >= z3.Sum([vars[r][c] for c, r in visible_arrow]))
+            elif visible_arrow:
+                # print("partial arrow", (hc, hr), arrow)
+                sum = self.sudoku_digit(s)
+                s.add(sum <= z3.Sum([vars[r][c] for c, r in visible_arrow]))
+            # else:
+            #     print("hidden arrow", (hc, hr), arrow)
+
+    def _add_kropkis(self, s, vars, multipliers, visible):
         # add kropki constraints
         for (c0, r0), (c1, r1) in self._black_kropkis:
             assert (c0, r0) != (c1, r1)
+
+            if (c0, r0) not in visible and (c1, r1) not in visible:
+                # hidden by fog
+                continue
+
+            # print("black visible", (c0, r0), (c1, r1))
             v0 = vars[r0][c0] * multipliers[r0][c0]
             v1 = vars[r1][c1] * multipliers[r1][c1]
 
@@ -338,6 +441,12 @@ class Solver:
         whites = set()
         for (c0, r0), (c1, r1) in self._white_kropkis:
             assert (c0, r0) != (c1, r1)
+
+            if (c0, r0) not in visible and (c1, r1) not in visible:
+                # hidden by fog
+                continue
+
+            # print("white visible", (c0, r0), (c1, r1))
             whites.add(frozenset([(c0, r0), (c1, r1)]))
             v0 = vars[r0][c0] * multipliers[r0][c0]
             v1 = vars[r1][c1] * multipliers[r1][c1]
@@ -423,30 +532,37 @@ class Solver:
             if sum is not None:
                 s.add(sum == z3.Sum(vs))
 
-    def _add_whisper_lines(self, s, vars, multipliers):
+    def _add_whisper_lines(self, s, vars, multipliers, visible):
         # add whisper line constraints
         for line, min_diff in self._whisper_lines:
+            visible_line, _ = self._filter_line_by_visibility(line, visible)
+
             for (c0, r0), (c1, r1) in zip(line, line[1:]):
-                v0 = vars[r0][c0] * multipliers[r0][c0]
-                v1 = vars[r1][c1] * multipliers[r1][c1]
+                if (c0, r0) in visible_line and (c1, r1) in visible_line:
+                    v0 = vars[r0][c0] * multipliers[r0][c0]
+                    v1 = vars[r1][c1] * multipliers[r1][c1]
 
-                s.add(z3.Abs(v0 - v1) >= min_diff)
+                    s.add(z3.Abs(v0 - v1) >= min_diff)
 
-    def _add_x_v(self, s, vars):
-        # add X/V constraints
-        for (c0, r0), (c1, r1), sum in self._x_v:
-            v0 = vars[r0][c0]
-            v1 = vars[r1][c1]
-            s.add(v0 + v1 == sum)
+    def _add_anti_x_v(self, s, vars):
+        x_v = set(frozenset([c0, c1]) for c0, c1, _ in self._x_v)
 
         if self._anti_x_v:
-            for cell0, v0, cell1, v1 in self.all_dominos(vars):
-                if cell0 in self._x_v and cell1 in self._x_v:
+            for c0, v0, c1, v1 in self.all_dominos(vars):
+                if frozenset([c0, c1]) in x_v:
                     # has an X or V
                     continue
 
                 s.add(v0 + v1 != 5)
                 s.add(v0 + v1 != 10)
+
+    def _add_x_v(self, s, vars, visible):
+        # add X/V constraints
+        for (c0, r0), (c1, r1), sum in self._x_v:
+            if (c0, r0) in visible or (c1, r1) in visible:
+                v0 = vars[r0][c0]
+                v1 = vars[r1][c1]
+                s.add(v0 + v1 == sum)
 
     def _add_renban_nabner_lines(self, s, vars, multipliers):
         # add renban line constraints
@@ -778,27 +894,8 @@ class Solver:
 
         multipliers = self._multipliers(s, vars)
 
+        # constraints that apply independent of visibility
         self._add_diagonals(s, vars)
-
-        self._add_thermos(s, vars, multipliers)
-
-        self._add_arrows(s, vars)
-
-        self._add_kropkis(s, vars, multipliers)
-
-        self._add_region_sum_lines(s, vars)
-
-        self._add_zipper_lines(s, vars, multipliers)
-
-        self._add_smaller_than(s, vars)
-
-        self._add_killer_cages(s, vars, multipliers)
-
-        self._add_whisper_lines(s, vars, multipliers)
-
-        self._add_x_v(s, vars)
-
-        self._add_renban_nabner_lines(s, vars, multipliers)
 
         self._add_anti_knight(s, vars)
 
@@ -808,52 +905,126 @@ class Solver:
 
         self._add_disjoint(s, vars)
 
-        self._add_entropic_lines(s, vars)
-
-        self._add_odd_evens(s, vars)
-
-        self._add_palindroms(s, vars)
-
-        self._add_between_lines(s, vars)
-
-        self._add_quadruples(s, vars)
-
         self._add_xsums(s, vars)
 
-        self._add_clones(s, vars)
+        self._add_anti_x_v(s, vars)
 
-        self._add_sandwhiches(s, vars)
-
-        self._add_magic_squares(s, vars)
-
-        self._add_circles(s, vars)
-
-        # add extra constraints
-        for extra_constraint, with_multipliers in self._extra_constraints:
-            if with_multipliers:
-                extra_constraint(s, vars, multipliers)
-            else:
-                extra_constraint(s, vars)
-
-        # add givens
-        if self._given:
-            for r, row in enumerate(self._given):
-                for c, x in enumerate(row):
-                    if x in self._digits:
-                        s.add(vars[r][c] == x)
-
-        class Solution:
-            def __init__(self, solver, z3_solver, vars, multipliers):
-                self.solver = solver
-                self.z3_solver = z3_solver
-                self.grid = vars
-                self.multipliers = multipliers
-
-        # solve
-        if s.check() == z3.sat:
-            return Solution(self, s, vars, multipliers)
+        if self._visible is None:
+            visible = set((c, r) for r in range(self._height) for c in range(self._width))
         else:
-            return None
+            visible = set(self._visible)
+
+        completed = {}
+
+        # solve iteratiivley with the cells that are visible
+        while True:
+            # print("-------------------")
+            s.push()
+
+            # constraints that depend on visibility
+            self._add_thermos(s, vars, multipliers, visible)
+
+            self._add_arrows(s, vars, visible)
+
+            self._add_kropkis(s, vars, multipliers, visible)
+
+            self._add_region_sum_lines(s, vars)
+
+            self._add_zipper_lines(s, vars, multipliers)
+
+            self._add_smaller_than(s, vars)
+
+            self._add_killer_cages(s, vars, multipliers)
+
+            self._add_whisper_lines(s, vars, multipliers, visible)
+
+            self._add_x_v(s, vars, visible)
+
+            self._add_renban_nabner_lines(s, vars, multipliers)
+
+            self._add_entropic_lines(s, vars)
+
+            self._add_odd_evens(s, vars)
+
+            self._add_palindroms(s, vars)
+
+            self._add_between_lines(s, vars)
+
+            self._add_quadruples(s, vars)
+
+            self._add_clones(s, vars)
+
+            self._add_sandwhiches(s, vars)
+
+            self._add_magic_squares(s, vars)
+
+            self._add_circles(s, vars)
+
+            # add extra constraints
+            for extra_constraint, with_multipliers in self._extra_constraints:
+                if with_multipliers:
+                    extra_constraint(s, vars, multipliers)
+                else:
+                    extra_constraint(s, vars)
+
+            # add givens
+            if self._given:
+                for r, row in enumerate(self._given):
+                    for c, x in enumerate(row):
+                        if x in self._digits:
+                            s.add(vars[r][c] == x)
+
+            for (c, r), n in completed.items():
+                s.add(vars[r][c] == n)
+
+            def mark_completed(c, r, n):
+                k = (c, r)
+                if k not in completed:
+                    #print("completed", c, r, n)
+                    completed[k] = n
+
+                    for nc, nr in adjacent_with_cell(vars, c, r):
+                        visible.add((nc, nr))
+
+            # solve this iteration
+            if s.check() == z3.sat:
+                prev_completed = len(completed)
+
+                if self._visible is not None:
+                    # fog of war
+                    m = s.model()
+                    grid = [[m[vars[r][c]] for c in range(len(vars[0]))] for r in range(len(vars))]
+
+                    # check which cells are completed
+                    for r in range(9):
+                        for c in range(9):
+                            if (c, r) in completed:
+                                continue
+
+                            # check if this value must be as in the model
+                            s.push()
+                            s.add(vars[r][c] != grid[r][c].as_long())
+
+                            if s.check() == z3.unsat:
+                                mark_completed(c, r, grid[r][c].as_long())
+                            s.pop()
+
+                    if len(completed) == self._width * self._height:
+                        # print("done!")
+
+                        s.check()
+                        return Solution(self, s, vars, multipliers)
+                    elif prev_completed == len(completed):
+                        print("failed to clear fog")
+                        return None
+
+                    s.pop()
+                else:
+                    # not fog of war
+                    return Solution(self, s, vars, multipliers)
+            else:
+                # unsat
+                return None
 
     def all_dominos(self, vars):
         for r in range(self._height):
