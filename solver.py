@@ -79,6 +79,9 @@ class Solver:
         self._given = given
         self._width = width
         self._height = height
+        self._distinct_rows = True
+        self._distinct_columns = True
+        self._distinct_regions = True
         self._regions = Solver.REGULAR_9X9_REGIONS
         self._digits = list(range(1, 9 + 1))
         self._unique_positive_diagonal = False
@@ -417,9 +420,13 @@ class Solver:
                 # arrow is partial, head is at least the sum of the visible parts
                 s.add(vars[hr][hc] >= z3.Sum([vars[r][c] for c, r in visible_arrow]))
             elif visible_arrow:
-                # print("partial arrow", (hc, hr), arrow)
+                # print("partial arrow", (hc, hr), arrow, visible_arrow)
                 sum = self.sudoku_digit(s)
-                s.add(sum <= z3.Sum([vars[r][c] for c, r in visible_arrow]))
+
+                s.add(z3.Or(
+                    z3.And(sum == z3.Sum([vars[r][c] for c, r in visible_arrow if (c, r) in visible]), vars[hr][hc] == sum),
+                    sum >= z3.Sum([vars[r][c] for c, r in visible_arrow]),
+                ))
             # else:
             #     print("hidden arrow", (hc, hr), arrow)
 
@@ -867,14 +874,16 @@ class Solver:
 
                 row.append(v)
 
-            # each row contains a digit at most once
-            s.add(z3.Distinct(row))
+            if self._distinct_rows:
+                # each row contains a digit at most once
+                s.add(z3.Distinct(row))
 
             vars.append(row)
 
-        # each column contains a digit at most once
-        for col in map(list, zip(*vars)):
-            s.add(z3.Distinct(col))
+        if self._distinct_columns:
+            # each column contains a digit at most once
+            for col in map(list, zip(*vars)):
+                s.add(z3.Distinct(col))
 
         # verify regions are correct
         if self._regions:
@@ -888,9 +897,10 @@ class Solver:
 
             assert len(seen) == self._width * self._height
 
-            # add region constraints
-            for region in self._regions:
-                s.add(z3.Distinct([vars[r][c] for c, r in region]))
+            if self._distinct_regions:
+                # add region constraints
+                for region in self._regions:
+                    s.add(z3.Distinct([vars[r][c] for c, r in region]))
 
         multipliers = self._multipliers(s, vars)
 
@@ -908,6 +918,8 @@ class Solver:
         self._add_xsums(s, vars)
 
         self._add_anti_x_v(s, vars)
+
+        self._add_sandwhiches(s, vars)
 
         if self._visible is None:
             visible = set((c, r) for r in range(self._height) for c in range(self._width))
@@ -954,8 +966,6 @@ class Solver:
 
             self._add_clones(s, vars)
 
-            self._add_sandwhiches(s, vars)
-
             self._add_magic_squares(s, vars)
 
             self._add_circles(s, vars)
@@ -990,10 +1000,23 @@ class Solver:
             if s.check() == z3.sat:
                 prev_completed = len(completed)
 
+
                 if self._visible is not None:
                     # fog of war
                     m = s.model()
                     grid = [[m[vars[r][c]] for c in range(len(vars[0]))] for r in range(len(vars))]
+
+                    # for row in grid:
+                    #     print(" ".join(map(str, row)))
+
+                    # for r in range(9):
+                    #     ss = []
+                    #     for c in range(9):
+                    #         if (c, r) in completed:
+                    #             ss.append("#")
+                    #         else:
+                    #             ss.append(".")
+                    #     print(" ".join(ss))
 
                     # check which cells are completed
                     for r in range(9):

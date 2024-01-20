@@ -8,6 +8,7 @@ def snake(
         s,
         width=9,
         height=9,
+        length=None,
         must_include_cells=[],
         must_include_regions=[],
         dont_touch_diagonally=True):
@@ -53,9 +54,12 @@ def snake(
     s.add(end_c >= 0, end_c < width)
     s.add(end_r >= 0, end_r < height)
 
-    # snake must be at least 2 cells long
     gs = [g for row in grid for g in row]
-    s.add(z3_count(lambda s: s > 0, gs) >= 2)
+    if length is not None:
+        s.add(z3_count(lambda s: s > 0, gs) == length)
+    else:
+        # snake must be at least 2 cells long
+        s.add(z3_count(lambda s: s > 0, gs) >= 2)
 
     # not a loop
     s.add(z3.Not(z3.And(start_c == end_c, start_r == end_r)))
