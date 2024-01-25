@@ -13,6 +13,24 @@ class Solution:
         self.grid = vars
         self.multipliers = multipliers
 
+    def unique(self):
+        assert self.z3_solver.check() == z3.sat
+
+        m = self.z3_solver.model()
+        or_terms = []
+        for row in self.grid:
+            for v in row:
+                or_terms.append(v != m[v].as_long())
+
+        self.z3_solver.push()
+        self.z3_solver.add(z3.Or(or_terms))
+        unique = self.z3_solver.check() == z3.unsat
+        self.z3_solver.pop()
+
+        assert self.z3_solver.check() == z3.sat
+
+        return unique
+
 
 class Solver:
 
@@ -172,8 +190,8 @@ class Solver:
     def region_sum_line(self, line):
         return self.region_sum_lines([line])
 
-    def region_sum_lines(self, lines):
-        self._region_sum_lines.extend(lines)
+    def region_sum_lines(self, lines, chunked=False):
+        self._region_sum_lines.extend([(line, chunked) for line in lines])
         return self
 
     def zipper_line(self, line):
@@ -473,15 +491,18 @@ class Solver:
 
     def _add_region_sum_lines(self, s, vars):
         # add region sum lines constraints
-        for line in self._region_sum_lines:
-            # divide up per region
-            chunks = defaultdict(set)
-            for cell in line:
-                for region in self._regions:
-                    if cell in region:
-                        chunks[region].add(cell)
+        for line, chunked in self._region_sum_lines:
+            if chunked:
+                chunks = line
+            else:
+                # divide up per region
+                chunks = defaultdict(set)
+                for cell in line:
+                    for region in self._regions:
+                        if cell in region:
+                            chunks[region].add(cell)
 
-            chunks = [c for c in chunks.values()]
+                chunks = [c for c in chunks.values()]
 
             # each pair of chunks must have the same sum
             for c1, c2 in zip(chunks, chunks[1:]):

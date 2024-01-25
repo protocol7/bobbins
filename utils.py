@@ -10,6 +10,10 @@ def orthogonal(grid, c, r) -> tuple[int, int]:
     return _neighbours(grid, c, r, ORTHOGONAL)
 
 
+def adjacent(grid, c, r) -> tuple[int, int]:
+    return _neighbours(grid, c, r, ADJACENT)
+
+
 def adjacent_with_cell(grid, c, r) -> tuple[int, int]:
     return _neighbours(grid, c, r, ADJACENT_WITH_CELL)
 
@@ -34,3 +38,7 @@ def z3_max(vs):
     for v in vs[1:]:
         m = z3.If(v > m, v, m)
     return m
+
+
+def flatten(xs):
+    return [x for subxs in xs for x in subxs]
