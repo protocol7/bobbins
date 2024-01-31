@@ -115,7 +115,8 @@ class Solver:
         self._killer_cages = []
         self._whisper_lines = []
         self._x_v = []
-        self._anti_x_v = False
+        self._anti_x = False
+        self._anti_v = False
         self._renban_lines = []
         self._anti_knight = False
         self._anti_king = False
@@ -259,7 +260,16 @@ class Solver:
         return self
 
     def anti_x_v(self):
-        self._anti_x_v = True
+        self._anti_x = True
+        self._anti_v = True
+        return self
+
+    def anti_x(self):
+        self._anti_x = True
+        return self
+
+    def anti_v(self):
+        self._anti_v = True
         return self
 
     def odds(self, cells):
@@ -326,8 +336,8 @@ class Solver:
         return self
 
     # fn(solver, cells)
-    def extra_constraint(self, fn, with_multipliers=False):
-        self._extra_constraints.append((fn, with_multipliers))
+    def extra_constraint(self, fn, with_multipliers=False, with_visible=False):
+        self._extra_constraints.append((fn, with_multipliers, with_visible))
         return self
 
     def _filter_line_by_visibility(self, line, visible):
@@ -480,8 +490,12 @@ class Solver:
 
         if self._white_kropkis_anti:
             for (c0, r0), v0, (c1, r1), v1 in self.all_dominos(vars):
+                if (c0, r0) > (c1, r1):
+                    continue
+
                 k = frozenset([(c0, r0), (c1, r1)])
                 if k in whites:
+                    print(k)
                     continue
 
                 v0 = v0 * multipliers[r0][c0]
@@ -573,16 +587,25 @@ class Solver:
                     s.add(z3.Abs(v0 - v1) >= min_diff)
 
     def _add_anti_x_v(self, s, vars):
-        x_v = set(frozenset([c0, c1]) for c0, c1, _ in self._x_v)
 
-        if self._anti_x_v:
+        def _anti(sum):
+            x_v = set(frozenset([c0, c1]) for c0, c1, s in self._x_v if s == sum)
             for c0, v0, c1, v1 in self.all_dominos(vars):
+                if c0 < c1:
+                    continue
+
                 if frozenset([c0, c1]) in x_v:
+                    #print(frozenset([c0, c1]), v0, v1)
                     # has an X or V
                     continue
 
-                s.add(v0 + v1 != 5)
-                s.add(v0 + v1 != 10)
+                s.add(v0 + v1 != sum)
+
+        if self._anti_x:
+            _anti(10)
+
+        if self._anti_v:
+            _anti(5)
 
     def _add_x_v(self, s, vars, visible):
         # add X/V constraints
@@ -992,9 +1015,13 @@ class Solver:
             self._add_circles(s, vars)
 
             # add extra constraints
-            for extra_constraint, with_multipliers in self._extra_constraints:
-                if with_multipliers:
+            for extra_constraint, with_multipliers, with_visible in self._extra_constraints:
+                if with_multipliers and with_visible:
+                    extra_constraint(s, vars, multipliers, visible)
+                elif with_multipliers:
                     extra_constraint(s, vars, multipliers)
+                elif with_visible:
+                    extra_constraint(s, vars, visible)
                 else:
                     extra_constraint(s, vars)
 
@@ -1014,20 +1041,28 @@ class Solver:
                     #print("completed", c, r, n)
                     completed[k] = n
 
-                    for nc, nr in adjacent_with_cell(vars, c, r):
-                        visible.add((nc, nr))
+                    # givens doesn't count to increase visibility
+                    if self._given[r][c] is None:
+                        for nc, nr in adjacent_with_cell(vars, c, r):
+                            visible.add((nc, nr))
 
             # solve this iteration
             if s.check() == z3.sat:
                 prev_completed = len(completed)
-
 
                 if self._visible is not None:
                     # fog of war
                     m = s.model()
                     grid = [[m[vars[r][c]] for c in range(len(vars[0]))] for r in range(len(vars))]
 
-                    # for row in grid:
+                    # for r in range(self._height):
+                    #     row = []
+                    #     for c in range(self._width):
+                    #         if (c, r) in visible:
+                    #             row.append(grid[r][c].as_long())
+                    #         else:
+                    #             row.append(" ")
+
                     #     print(" ".join(map(str, row)))
 
                     # for r in range(9):
