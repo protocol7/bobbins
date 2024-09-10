@@ -566,13 +566,14 @@ class Solver:
         for cage, sum, unique in self._killer_cages:
             assert not set(cage) & seen
             seen.update(cage)
-            vs = [vars[r][c] * multipliers[r][c] for c, r in cage]
+            vs = [vars[r][c] for c, r in cage]
             if unique:
                 # digits in the cage must be unique
                 s.add(z3.Distinct(vs))
 
+            mvs = [vars[r][c] * multipliers[r][c] for c, r in cage]
             if sum is not None:
-                s.add(sum == z3.Sum(vs))
+                s.add(sum == z3.Sum(mvs))
 
     def _add_whisper_lines(self, s, vars, multipliers, visible):
         # add whisper line constraints
@@ -800,7 +801,7 @@ class Solver:
                 s.add(a == b)
 
     def _add_sandwhiches(self, s, vars):
-        def _sandwhiches(vs, size, low_digit, high_digit):
+        def _sandwhiches(vs, sum, size, low_digit, high_digit):
             or_constraints = []
             for low in range(0, size):
                 vlow = vs[low]
@@ -819,12 +820,12 @@ class Solver:
         # sandwhich rows
         for (row, sum), low_digit, high_digit in self._sandwhich_rows:
             vrow = vars[row]
-            _sandwhiches(vrow, self._width, low_digit, high_digit)
+            _sandwhiches(vrow, sum, self._width, low_digit, high_digit)
 
         # sandwhich cols
         for (col, sum), low_digit, high_digit in self._sandwhich_cols:
             vcol = [vars[r][col] for r in range(0, self._height)]
-            _sandwhiches(vcol, self._height, low_digit, high_digit)
+            _sandwhiches(vcol, sum, self._height, low_digit, high_digit)
 
     def _add_magic_squares(self, s, vars):
         for c, r in self._magic_squares:
